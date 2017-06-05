@@ -19,11 +19,16 @@ module db_req (
 	output reg target_busy_o,
 
 	input go,
-	input      [33:0] user_addr,
-    input       [3:0] user_ftype,
-    input       [3:0] user_ttype,
-    input       [7:0] user_size,
-    input      [63:0] user_data,
+	input wire [33:0] user_addr,
+    input wire [3:0] user_ftype,
+    input wire [3:0] user_ttype,
+    input wire [7:0] user_size,
+
+    input wire [63:0] user_tdata_in,
+    input wire user_tvalid_in,
+    input wire user_tkeep_in,
+    input wire user_tlast_in,
+    output wire user_tready_o,
 
 	output reg 			ireq_tvalid_o,
 	input wire 			ireq_tready_in,
@@ -64,7 +69,10 @@ reg [2:0] state;
 reg  [15:0] log_rst_shift;
 wire        log_rst_q;
 
+// NWRITE signals
 wire [63:0] nwrite_instr;
+reg nwr_first_beat;
+wire nwr_advance_condition;
 
 reg dr_req_r1, dr_req_p;
 
@@ -83,6 +91,28 @@ wire [15:0] resp_src_id;
 wire get_a_response;
 wire target_ready;
 wire target_busy;
+
+// FIFO signals
+wire fifo_clk;
+wire fifo_rst;
+wire [74:0] fifo_din;
+wire fifo_wr_en;
+wire fifo_rd_en;
+wire [74:0] fifo_dout;
+wire fifo_full;
+wire fifo_empty;
+wire [8:0] fifo_data_cnt;
+reg fifo_data_first;
+reg user_tvalid_r;
+reg user_tdata_r;
+reg user_tlast_r;
+reg user_tkeep_r;
+
+wire [63:0] current_user_data;
+wire current_user_valid;
+wire current_user_first;
+wire current_user_keep;
+wire current_user_last;
 
 always @(posedge log_clk or posedge log_rst) begin
 	if (log_rst)
@@ -144,13 +174,7 @@ always @(posedge log_clk) begin
 				state <= DB_REQ_s;
 			end
 
-			if (ireq_tready_in) begin
-				ireq_tdata_o <= db_instr[63:0];
-				ireq_tvalid_o <= 1'b1;
-				ireq_tkeep_o <= 8'hff;
-				ireq_tlast_o <= 1'b1;
-				ireq_tuser_o <= {src_id, des_id};	
-			end
+
 		end
 		DB_RESP_s: begin
 			if (target_ready) begin
@@ -168,8 +192,84 @@ always @(posedge log_clk) begin
 			end
 		end
 		NWRITE_s：begin
+
 		end
 		
+	end
+end
+
+always @(posedge log_clk) begin
+	if (log_rst_q) begin
+		ireq_tvalid_o <= 1'b0;
+		ireq_tlast_o <= 1'b0;
+		ireq_tdata_o <= 1'b0;
+		ireq_tkeep_o <= 1'b0;
+		ireq_tuser_o <= 1'b0;
+		fifo_rd_en	<= 1'b0;
+	end
+	else begin
+		ireq_tvalid_o <= 1'b0;
+		ireq_tlast_o <= 1'b0;
+		ireq_tdata_o <= 1'b0;
+		ireq_tkeep_o <= 8'hff;
+		ireq_tuser_o <= 1'b0;
+		fifo_rd_en	<= 1'b0;
+		case (state)
+		IDLE_s: begin
+
+		end
+		DB_REQ_s: begin
+			if (ireq_tready_in) begin
+				ireq_tdata_o <= db_instr[63:0];
+				ireq_tvalid_o <= 1'b1;
+				ireq_tkeep_o <= 8'hff;
+				ireq_tlast_o <= 1'b1;
+				ireq_tuser_o <= {src_id, des_id};	
+			end
+		end
+		DB_RESP_s: begin
+
+		end
+		NWRITE_s: begin
+			if (nwr_first_beat && ireq_tready_in) begin
+				ireq_tdata_o <= {nwr_srcID, NWRITE, TNWR, 1'b0, 2'h1, 1'b0, (current_size-1), 2'h0, addr};
+				ireq_tuser_o <= {src_id, des_id};
+				ireq_tvalid_o <= 1'b1;
+			end
+			else if (!nwr_first_beat && ireq_tready_in) begin
+				fifo_rd_en	<= 1'b1;
+				ireq_tdata_o <= current_user_data;
+				ireq_tkeep_o <= current_user_tkeep;
+				ireq_tlast_o <= current_user_last;
+				ireq_tvalid_o <= current_user_valid;
+			end
+		end
+
+	end
+	
+	
+end
+/*
+1. consider about the relationship of user size and packet size
+2. the times of a whole packet transfer and the remaining transfer
+3. update the nwr_srcID
+*/
+
+
+
+assign nwr_advance_condition = ireq_tready_in && ireq_tvalid_o;
+
+always @(posedge log_clk) begin
+	if (log_rst_q) begin
+		nwr_first_beat <= 1'b1;
+	end
+	else begin
+		if (nwr_advance_condition && ireq_tlast_o) begin
+			nwr_first_beat <= 1'b1;
+		end
+		else if (nwr_advance_condition) begin
+			nwr_first_beat <= 1'b0;
+		end
 	end
 end
 
@@ -212,5 +312,46 @@ always @(posedge log_clk or posedge log_rst) begin
 	end
 end
 
+//Logic for user data
+
+assign fifo_clk = log_clk;
+assign fifo_rst = log_rst_q;
+assign fifo_din = {user_tvalid_r, fifo_data_first, user_tkeep_r, user_tlast_r, user_tdata_r};
+assign fifo_wr_en = user_tvalid_r;
+
+assign current_user_valid = fifo_dout[74];
+assign current_user_first = fifo_dout[73];
+assign current_user_tkeep = fifo_dout[72:65];
+assign current_user_last = fifo_dout[64];
+assign current_user_data = fifo_dout[63:0];
+
+always @(posedge fifo_clk) begin
+	if (fifo_rst) begin
+		user_tvalid_r <= 1'b0;
+		user_tdata_r <= 1'b0;
+		user_tlast_r <= 1'b0;
+		user_tkeep_r <= 'h0;
+	end
+	else begin
+		user_tvalid_r <= user_tvalid_in;
+		fifo_data_first	<= ~user_tvalid_r & user_tvalid_in;
+
+		user_tdata_r <= user_tdata_in;
+		user_tkeep_r <= user_tkeep_in;
+		user_tlast_r <= user_tlast_in;
+	end
+end
+
+fifo_66x512 user_data_fifo (
+  .clk(fifo_clk),                // input wire clk
+  .srst(fifo_rst),              // input wire srst
+  .din(fifo_din),                // input wire [65 : 0] din
+  .wr_en(fifo_wr_en),            // input wire wr_en
+  .rd_en(fifo_rd_en),            // input wire rd_en
+  .dout(fifo_dout),              // output wire [65 : 0] dout
+  .full(fifo_full),              // output wire full
+  .empty(fifo_empty),            // output wire empty
+  .data_count(fifo_data_cnt)  // output wire [8 : 0] data_count
+);
 endmodule
 
