@@ -11,7 +11,7 @@ module db_resp
 	input wire [1:0] ed_ready_in,
 
 	input wire treq_tvalid_in,
-	output reg treq_tready_o,
+	output wire treq_tready_o,
 	input wire treq_tlast_in,
 	input wire [63:0] treq_tdata_in,
 	input wire [7:0] treq_tkeep_in,
@@ -55,8 +55,7 @@ wire  [7:0] current_size;
 wire  [1:0] current_prio;
 wire [33:0] current_addr;
 wire [15:0] current_srcid;
-wire [15:0] dest_id;
-wire [15:0] src_id;
+wire [15:0] current_db_info;
 
 // request signals
 
@@ -70,7 +69,8 @@ reg ed_ready;
 reg [15:0] log_rst_shift;
 wire log_rst_q;
 
-treq_advance_condition = treq_tready_in && treq_tvalid_in;
+assign treq_advance_condition = treq_tvalid_in;
+assign treq_tready_o = 1'b1;
 //tresp_advance_condition = tresp_tready_in && tresp_tvalid_in;
 
 // Generate log reset 
@@ -89,7 +89,7 @@ always @(posedge log_clk) begin
 	if (log_rst_q) begin
  	 first_beat <= 1'b1;
 	end 
-	else if (treq_advance_condition && val_treq_tlast) begin
+	else if (treq_advance_condition && treq_tlast_in) begin
   		first_beat <= 1'b1;
 	end
 	else if (treq_advance_condition) begin
@@ -97,13 +97,21 @@ always @(posedge log_clk) begin
 	end
 end
 
-assign current_tid   = treq_tdata[63:56];
-assign current_ftype = treq_tdata[55:52];
-assign current_ttype = treq_tdata[51:48];
-assign current_size  = treq_tdata[43:36];
-assign current_prio  = treq_tdata[46:45] + 2'b01;
-assign current_addr  = treq_tdata[33:0];
-assign current_srcid = treq_tuser[31:16];
+assign current_tid   = treq_tdata_in[63:56];
+assign current_ftype = treq_tdata_in[55:52];
+assign current_ttype = treq_tdata_in[51:48];
+assign current_size  = treq_tdata_in[43:36];
+assign current_prio  = treq_tdata_in[46:45] + 2'b01;
+assign current_addr  = treq_tdata_in[33:0];
+assign current_db_info = treq_tdata_in[31:16];
+assign current_srcid = treq_tuser_in[31:16];
+
+always @(posedge log_clk) begin
+	if (current_ftype == DOORB && treq_tvalid_in) begin
+		$display("Get a request from target, whose src_id is %x", current_srcid);
+		$display("The inform in the request is %x",current_db_info);
+	end
+end
 
 // Generate a response flag
 always @(posedge log_clk) begin
@@ -118,33 +126,39 @@ always @(posedge log_clk) begin
 
 always @(posedge log_clk) begin
 	if (log_rst_q) begin
+		//treq_tready_o <= 1'b1;
 		tresp_advance_condition <= 1'b0;
 	end
 	else begin
 		if (generate_a_response) begin
 			tresp_advance_condition <= 1'b1;
+		//	treq_tready_o <= 1'b0;
+		end
+		else begin
+			tresp_advance_condition <= 1'b0;
 		end
 
 		if (tresp_advance_condition && tresp_tready_in) begin
-			if (ed_ready_in) begin
-				tresp_tdata_o <= db_instr[63:0];
+			if (ed_ready_in == 2'h1) begin
+				tresp_tdata_o <= db_instr[64*2-1:64];
 			end
 			else begin
-				tresp_tdata_o <= db_instr[64*2-1:64];
+				tresp_tdata_o <= db_instr[63:0];
 			end
 			tresp_tkeep_o <= 8'hff;
 			tresp_tlast_o <= 1'b1;
 			tresp_tvalid_o <= 1'b1;
-			tresp_tuser_o <= {src_id, dest_id};
-			tresp_advance_condition <= 1'b0;
+			tresp_tuser_o <= {src_id, des_id};
+			//tresp_advance_condition <= 1'b0;
 		end
 		else begin
+			//treq_tready_o <= 1'b1;
 			tresp_tvalid_o <= 1'b0;
 			tresp_tdata_o <= 64'h0;
 			tresp_tkeep_o <= 8'h0;
 			tresp_tuser_o <= 32'h0;
 			tresp_tlast_o <= 1'b0;
-			tresp_advance_condition <= tresp_advance_condition;
+			//tresp_advance_condition <= tresp_advance_condition;
 		end
 	end
 end
