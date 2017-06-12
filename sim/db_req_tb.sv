@@ -185,4 +185,25 @@ end
 	.tresp_tuser_o(tresp_tuser_o)
 	);
 
+user_logic user_logic_i (
+
+    .log_clk(log_clk),
+    .log_rst(log_rst),
+
+    .nwr_ready_in(nwr_ready_o),
+    .nwr_busy_in(nwr_busy_o),
+
+    .user_tready_in(user_tready_o),
+    .user_addr_o(user_addr),
+    .user_ftype_o(),
+    .user_ttype_o(),
+    .user_tsize_o(user_tsize_in),
+
+    .user_tdata_o(user_tdata_in),
+    .user_tvalid_o(user_tvalid_in),
+    .user_tkeep_o(user_tkeep_in),
+    .user_tlast_o(user_tlast_in)
+
+    );
+
 endmodule // db_req_tb

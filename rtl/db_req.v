@@ -261,7 +261,7 @@ always @(posedge log_clk) begin
 				ireq_tuser_o <= {src_id, des_id};
 				ireq_tvalid_o <= 1'b1;
 			end
-			else if (!nwr_first_beat && ireq_tready_in) begin
+			else if (!nwr_first_beat && ireq_tready_in && ~fifo_empty) begin
 				fifo_rd_en	<= 1'b1;
 				ireq_tdata_o <= current_user_data;
 				ireq_tkeep_o <= current_user_keep;
@@ -293,6 +293,18 @@ always @(posedge log_clk) begin
 						nwr_done <= 1;
 					end
 			end
+/*		else begin
+			    fifo_rd_en	<= 1'b0;
+				ireq_tdata_o <= current_user_data;
+				ireq_tkeep_o <= current_user_keep;
+				ireq_tvalid_o <= current_user_valid;
+
+				nwr_packect_transfer_cnt <= nwr_packect_transfer_cnt;
+				ireq_tlast_o <= ireq_tlast_o;
+				nwr_byte_cnt <= nwr_byte_cnt;
+
+			end
+			*/
 		end
 		default: begin
 			rapidIO_ready_o <= 1'b1;
