@@ -1,4 +1,4 @@
-`timescale 	1ps/1ps
+`timescale 	1ns/1ns
 
 module user_logic (
 
@@ -43,9 +43,10 @@ reg [11:0] byte_cnt;
 
 // Count the sent data in the unit of qword
 reg [9:0] qword_cnt;
+reg data_first;
 
 
-assign user_tsize_o = user_tsize - 'h1;
+assign user_tsize_o = user_tsize-1;
 assign user_tlast_o = ((qword_cnt == (user_tsize[11:3] ) && user_tsize[2:0] == 2'd0) ||
 						(qword_cnt == (user_tsize[11:3] + 1) && user_tsize[2:0] != 2'd0));
 assign user_tdata_o = gen_data;
@@ -86,15 +87,16 @@ always @(posedge log_clk or posedge	log_rst) begin
 				gen_data <= 'h0;
 				qword_cnt <= 'h0;
 				byte_cnt <= 'h0;
-				if (nwr_ready_in) begin
+				if (nwr_ready_in && user_tready_in) begin
 					state <= GEN_DATA_s;
 					data_sel <= data_sel + 4'h1;
+					gen_data <= {52'h0, user_tsize-1};
+					user_tvalid_o <= 1'b1;
 				end
 				else begin
 					state <= IDLE_s;
 				end
-			end
-			GEN_DATA_s: begin
+
 				case(data_sel)
 					3'd0: user_tsize <= DATA_SIZE0;
 					3'd1: user_tsize <= DATA_SIZE1;
@@ -105,11 +107,14 @@ always @(posedge log_clk or posedge	log_rst) begin
 					3'd6: user_tsize <= DATA_SIZE6;
 					3'd7: user_tsize <= DATA_SIZE7;
 				endcase // data_sel
+			end
+			GEN_DATA_s: begin
 
 				if (user_tready_in) begin
-					gen_data <= gen_data + 'h1;
+					gen_data <= gen_data + 64'h1;
 					user_tvalid_o <= 1'b1;
 					qword_cnt <= qword_cnt + 1;
+		
 				end
 				else begin
 					gen_data <= gen_data;
@@ -129,6 +134,20 @@ always @(posedge log_clk or posedge	log_rst) begin
 				state <= IDLE_s;
 			end
 		endcase // data_sel
+	end
+end
+
+always @(posedge log_clk or posedge log_rst) begin
+	if (log_rst) begin
+		data_first <= 1'b1;
+	end
+	else begin
+		if (user_tlast_o && user_tvalid_o) begin
+			data_first <= 1'b1;
+		end
+		else if (user_tvalid_o) begin
+			data_first <= 1'b0;
+		end
 	end
 end
 				

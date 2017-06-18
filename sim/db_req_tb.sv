@@ -1,4 +1,5 @@
-`timescale 1ps/1ps
+`timescale 1ns/1ns
+
 module db_req_tb();
 
 	logic log_clk;
@@ -22,7 +23,7 @@ module db_req_tb();
 
     logic [63:0] user_tdata_in;
     logic user_tvalid_in;
-    logic user_tkeep_in;
+    logic [7:0] user_tkeep_in;
     logic user_tlast_in;
 
     logic [11:0] user_tsize_in;

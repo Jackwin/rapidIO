@@ -3,7 +3,8 @@
 	Description: Self check via Doorbell message.
 
 */
-`timescale 1ps/1ps
+
+`timescale 1ns/1ns
 module db_req (
 	input log_clk,
 	input log_rst,
@@ -29,7 +30,7 @@ module db_req (
 
     input wire [63:0] user_tdata_in,
     input wire user_tvalid_in,
-    input wire user_tkeep_in,
+    input wire [7:0] user_tkeep_in,
     input wire user_tlast_in,
     //Bytelength
 
@@ -125,12 +126,12 @@ wire current_user_valid;
 wire current_user_first;
 wire [7:0] current_user_keep;
 wire current_user_last;
-reg [11:0] current_user_size;
+wire [11:0] current_user_size;
 
-reg [7:0] nwr_byte_cnt;
-reg [3:0] nwr_packect_transfer_cnt; // A whole packect contains 256 bytes
+reg [8:0] nwr_byte_cnt;
+reg [4:0] nwr_packect_transfer_cnt; // A whole packect contains 256 bytes
 reg user_data_first;
-reg [3:0] packect_transfer_times;
+reg [4:0] packect_transfer_times;
 wire [7:0] byte_left;
 
 always @(posedge log_clk or posedge log_rst) begin
@@ -234,7 +235,7 @@ always @(posedge log_clk) begin
 		ireq_tdata_o <= 1'b0;
 		ireq_tkeep_o <= 8'hff;
 		ireq_tuser_o <= 1'b0;
-		fifo_rd_en	<= 1'b0;
+		//fifo_rd_en	<= 1'b0;
 		nwr_done <= 1'b0;
 		rapidIO_ready_o <= 1'b1;
 		case (state)
@@ -256,43 +257,63 @@ always @(posedge log_clk) begin
 		end
 		NWR_s: begin
 			rapidIO_ready_o <= 1'b0;
-			if (nwr_first_beat && ireq_tready_in) begin
+		/*	if (nwr_first_beat && ireq_tready_in && user_data_first) begin
 				ireq_tdata_o <= {nwr_srcID, NWR, TNWR, 1'b0, 2'h1, 1'b0, (current_user_size - 1), 2'h0, target_ed_addr};
 				ireq_tuser_o <= {src_id, des_id};
 				ireq_tvalid_o <= 1'b1;
 			end
 			else if (!nwr_first_beat && ireq_tready_in && ~fifo_empty) begin
-				fifo_rd_en	<= 1'b1;
+				//fifo_rd_en	<= 1'b1;
 				ireq_tdata_o <= current_user_data;
 				ireq_tkeep_o <= current_user_keep;
 				ireq_tvalid_o <= current_user_valid;
-
+*/			fifo_rd_en <= ~fifo_empty;
+			ireq_tdata_o <= (current_user_valid && current_user_first) ? {nwr_srcID, NWR, TNWR, 
+						1'b0, 2'h1, 1'b0, current_user_size , 2'h0, target_ed_addr}
+						: ((current_user_valid && ~current_user_first) ? current_user_data 
+						: 'h0);
+			ireq_tvalid_o <= current_user_valid;
 				// A whole packet is 64 Dwords
+			if (current_user_first && current_user_valid) begin
+				nwr_byte_cnt <= 'h0;
+				nwr_packect_transfer_cnt <= 'h0;
+			end
+			else if (current_user_valid) begin
 				if (nwr_byte_cnt == 8'd255) begin
 					nwr_packect_transfer_cnt <= nwr_packect_transfer_cnt + 4'h1;
 				end
 				else begin
 					nwr_byte_cnt <= nwr_byte_cnt + 6'h1;
 				end
-
-				// Using ireq_last to indicate the packet boundary. When the number of transferred
-				// packects is packect_transfer_times, the ireq_last_o depends on the actual last user data
-				// flag, that is the eof bit from FIFO.
-				if (nwr_packect_transfer_cnt == packect_transfer_times) begin 
-					ireq_tlast_o <= current_user_last;
-				end
-				else if (nwr_byte_cnt == 8'd255) begin  // The end of a 64-Dword packect
-					ireq_tlast_o <= 1'b1;
-				end
-				else begin
-					ireq_tlast_o <= 1'b0;
-				end
-
-				if (nwr_packect_transfer_cnt == packect_transfer_times && 
-					nwr_byte_cnt == current_user_size[7:0]) begin
-						nwr_done <= 1;
-					end
+			end 
+			else begin
+				nwr_byte_cnt <= nwr_byte_cnt;
+				nwr_packect_transfer_cnt <= nwr_packect_transfer_cnt;
 			end
+			if (current_user_valid && current_user_first) begin
+				packect_transfer_times <= current_user_data[12:8];
+			end
+			else begin
+				packect_transfer_times <= packect_transfer_times;
+			end
+			// Using ireq_last to indicate the packet boundary. When the number of transferred
+			// packects is packect_transfer_times, the ireq_last_o depends on the actual last user data
+			// flag, that is the eof bit from FIFO.
+			if (nwr_packect_transfer_cnt == packect_transfer_times) begin 
+				ireq_tlast_o <= current_user_last;
+			end
+			else if (nwr_byte_cnt == 8'd255) begin  // The end of a 64-Dword packect
+				ireq_tlast_o <= 1'b1;
+			end
+			else begin
+				ireq_tlast_o <= 1'b0;
+			end
+
+			if (nwr_packect_transfer_cnt == packect_transfer_times && 
+				nwr_byte_cnt == current_user_size[7:0]) begin
+				nwr_done <= 1;
+			end
+			
 /*		else begin
 			    fifo_rd_en	<= 1'b0;
 				ireq_tdata_o <= current_user_data;
@@ -305,11 +326,20 @@ always @(posedge log_clk) begin
 
 			end
 			*/
-		end
+		end // NWR_s:
+
 		default: begin
 			rapidIO_ready_o <= 1'b1;
 		end
 		endcase
+	end
+end
+//assign fifo_rd_en = (state == NWR_s && ~fifo_empty) ? 1'b1 : 1'b0;
+
+always @(posedge log_clk) begin
+	if (state == NWR_s && current_user_first) begin
+		$display("Now sending NWR packet, and the length is %d", current_user_size+1);
+		$display("The target ID is %x", target_ed_addr);
 	end
 end
 
@@ -380,7 +410,7 @@ end
 */
 
 
-assign nwr_advance_condition = ireq_tready_in && ireq_tvalid_o;
+assign nwr_advance_condition = ireq_tready_in && ireq_tvalid_o && (state == NWR_s);
 
 always @(posedge log_clk) begin
 	if (log_rst_q) begin
@@ -397,7 +427,7 @@ always @(posedge log_clk) begin
 end
 
 
-always @(posedge log_clk or posedge log_rst) begin
+/*always @(posedge log_clk or posedge log_rst) begin
 	if (log_rst) begin
 		ireq_tvalid_o <= 1'b0;
 		ireq_tlast_o <= 1'b0;
@@ -420,7 +450,7 @@ always @(posedge log_clk or posedge log_rst) begin
 		ireq_tuser_o <= 1'b0;
 	end
 end
-
+*/
 //Logic for user data
 
 assign user_tready_o = ~fifo_full;
@@ -436,20 +466,23 @@ assign current_user_last = fifo_dout[64];
 assign current_user_data = fifo_dout[63:0];
 
 
-
+/*
 always @(posedge log_clk) begin
 	if (log_rst_q) begin
 		current_user_size <= 'h0;
 	end
 	else begin
 		if (user_data_first) begin
-			current_user_size <= user_tsize_in ; // The maximum transter length is 256 bytes, equal to 64 Dwords
+			current_user_size <= user_tdata_r[11:0] ; // The maximum transter length is 256 bytes, equal to 64 Dwords
 		end
 		else begin
 			current_user_size <= current_user_size;
 		end
 	end
 end
+*/
+
+assign current_user_size = (user_data_first) ? user_tdata_r[11:0]  : current_user_size;
 
 assign packect_tfransfer_times = current_user_size[11:8];
 assign byte_left = current_user_size[7:0];
