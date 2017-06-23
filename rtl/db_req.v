@@ -12,7 +12,8 @@ module db_req (
 	input wire [15:0] src_id,
 	input wire [15:0] des_id,
 
-	input wire dr_req_in,
+	// Before NWR, the system should finish self-check via doorbell
+	input wire self_check_in,
 	input wire nwr_req_in,
 	output reg rapidIO_ready_o,
 	input wire link_initialized,
@@ -20,8 +21,9 @@ module db_req (
 	// Indicate NWR is ready to receive data from user logic
 	output reg nwr_ready_o,
 	output reg nwr_busy_o,
+	output reg nwr_done_o,
 
-	input go,
+	output go,
 	output wire user_tready_o,
 	input wire [33:0] user_addr,
     input wire [3:0] user_ftype,
@@ -77,9 +79,13 @@ wire        log_rst_q;
 wire [63:0] nwr_instr;
 reg nwr_first_beat;
 wire nwr_advance_condition;
-reg nwr_done;
+reg nwr_done ;
 wire [7:0] nwr_srcID;
 reg [33:0] target_ed_addr;
+// After the NWR operation, enable doorbell request and send the address (0x0200+n)
+reg db_req_ena;
+reg [15:0] db_req_inform;
+
 
 // Update the source ID
 reg bit_reverse;
@@ -129,6 +135,7 @@ wire current_user_last;
 wire [11:0] current_user_size;
 
 reg [8:0] nwr_byte_cnt;
+reg [8:0] nwr_8byte_cnt;
 reg [4:0] nwr_packect_transfer_cnt; // A whole packect contains 256 bytes
 reg user_data_first;
 reg [4:0] packect_transfer_times;
@@ -154,10 +161,6 @@ assign log_rst_q = log_rst_shift[15];
     end
  end
 */
-always @(posedge log_clk) begin
-	dr_req_r1 <= dr_req_in;
-	dr_req_p <= ~dr_req_r1 & dr_req_in;
-end
 
 always @(posedge log_clk) begin
 	if (log_rst_q) begin
@@ -166,7 +169,7 @@ always @(posedge log_clk) begin
 	else begin
 		case (state)
 		IDLE_s: begin
-			if (dr_req_in) begin
+			if (db_req_ena || self_check_in) begin
 				state <= DB_REQ_s;
 			end
 			else if (nwr_req_in) begin
@@ -200,6 +203,7 @@ always @(posedge log_clk) begin
 			end
 		end
 		NWR_s: begin
+			nwr_ready_o <= 1'b0;
 			if (nwr_done) begin
 				state <= IDLE_s	;
 			end
@@ -221,13 +225,15 @@ always @(posedge log_clk) begin
 		ireq_tvalid_o <= 1'b0;
 		ireq_tlast_o <= 1'b0;
 		ireq_tdata_o <= 1'b0;
-		ireq_tkeep_o <= 1'b0;
+		ireq_tkeep_o <= 'h0;
 		ireq_tuser_o <= 1'b0;
 		fifo_rd_en	<= 1'b0;
 		nwr_byte_cnt <= 'h0;
+		nwr_8byte_cnt <= 'h0;
 		nwr_packect_transfer_cnt <= 'h0;
 		nwr_done <= 1'b0;
 		rapidIO_ready_o <= 1'b1;
+		db_req_ena <= 1'b0;
 	end
 	else begin
 		ireq_tvalid_o <= 1'b0;
@@ -235,62 +241,96 @@ always @(posedge log_clk) begin
 		ireq_tdata_o <= 1'b0;
 		ireq_tkeep_o <= 8'hff;
 		ireq_tuser_o <= 1'b0;
-		//fifo_rd_en	<= 1'b0;
+		ireq_tvalid_o <= 1'b0;
+		fifo_rd_en	<= 1'b0;
 		nwr_done <= 1'b0;
 		rapidIO_ready_o <= 1'b1;
 		case (state)
 		IDLE_s: begin
 			rapidIO_ready_o <= 1'b1;
+			db_req_ena <= db_req_ena;
 		end
 		DB_REQ_s: begin
 			rapidIO_ready_o <= 1'b0;
+			db_req_ena <= 1'b0;
 			if (ireq_tready_in) begin
-				ireq_tdata_o <= db_instr[63:0];
-				ireq_tvalid_o <= 1'b1;
-				ireq_tkeep_o <= 8'hff;
-				ireq_tlast_o <= 1'b1;
-				ireq_tuser_o <= {src_id, des_id};	
+				// Send self-check 
+				if (~db_req_ena) begin
+					ireq_tdata_o <= db_instr[63:0];
+					ireq_tvalid_o <= 1'b1;
+					ireq_tkeep_o <= 8'hff;
+					ireq_tlast_o <= 1'b1;
+					ireq_tuser_o <= {src_id, des_id};	
+					$display("Source->Target: Self doorbell check");
+				end
+				// Send data integration check
+				else begin
+					ireq_tdata_o <= {db_instr[63:32],db_req_inform,16'h0};
+					ireq_tvalid_o <= 1'b1;
+					ireq_tkeep_o <= 8'hff;
+					ireq_tlast_o <= 1'b1;
+					ireq_tuser_o <= {src_id, des_id};
+					$display("Source->Target: Data integration doorbell reqest");
+					$display("Source->Target: Address is %x",db_req_inform);
+				end
 			end
 		end
 		DB_RESP_s: begin
 			rapidIO_ready_o <= 1'b0;
+			db_req_ena <= 1'b0;
 		end
 		NWR_s: begin
+			// Enable doorbell request
+			db_req_ena <= 1'b1;
+
 			rapidIO_ready_o <= 1'b0;
-		/*	if (nwr_first_beat && ireq_tready_in && user_data_first) begin
-				ireq_tdata_o <= {nwr_srcID, NWR, TNWR, 1'b0, 2'h1, 1'b0, (current_user_size - 1), 2'h0, target_ed_addr};
-				ireq_tuser_o <= {src_id, des_id};
-				ireq_tvalid_o <= 1'b1;
+		
+		// Once the NWR operation is done, so fifo_rd_en should be deasserted
+			if (current_user_last || ireq_tlast_o) begin
+				fifo_rd_en <= 1'b0;
 			end
-			else if (!nwr_first_beat && ireq_tready_in && ~fifo_empty) begin
-				//fifo_rd_en	<= 1'b1;
-				ireq_tdata_o <= current_user_data;
-				ireq_tkeep_o <= current_user_keep;
-				ireq_tvalid_o <= current_user_valid;
-*/			fifo_rd_en <= ~fifo_empty;
+			else begin
+				fifo_rd_en <= ~fifo_empty;
+			end // else
+
 			ireq_tdata_o <= (current_user_valid && current_user_first) ? {nwr_srcID, NWR, TNWR, 
-						1'b0, 2'h1, 1'b0, current_user_size , 2'h0, target_ed_addr}
+						1'b0, 2'h1, 1'b0, current_user_size[7:0] , 2'h0, target_ed_addr}
 						: ((current_user_valid && ~current_user_first) ? current_user_data 
 						: 'h0);
 			ireq_tvalid_o <= current_user_valid;
-				// A whole packet is 64 Dwords
+			ireq_tkeep_o <= current_user_keep;
+
+			// In one transfer, called as packet here, the maximum length is 256 bytes.
 			if (current_user_first && current_user_valid) begin
-				nwr_byte_cnt <= 'h0;
+				//nwr_byte_cnt <= 'h0;
+				nwr_8byte_cnt <= 'h0;
 				nwr_packect_transfer_cnt <= 'h0;
 			end
 			else if (current_user_valid) begin
-				if (nwr_byte_cnt == 8'd255) begin
+				if (nwr_8byte_cnt == 8'd31) begin
 					nwr_packect_transfer_cnt <= nwr_packect_transfer_cnt + 4'h1;
+					nwr_8byte_cnt <= 'h0;
 				end
 				else begin
-					nwr_byte_cnt <= nwr_byte_cnt + 6'h1;
+					nwr_8byte_cnt <= nwr_8byte_cnt + 8'h1;  
 				end
 			end 
 			else begin
-				nwr_byte_cnt <= nwr_byte_cnt;
+				nwr_8byte_cnt <= nwr_8byte_cnt;
 				nwr_packect_transfer_cnt <= nwr_packect_transfer_cnt;
 			end
+
+			// current_user_last means the last of the user data, so everything should be cleared, and set nwr_done
+			if (current_user_last) begin
+				nwr_8byte_cnt <= 'h0;
+				nwr_done <= 1'b1;
+			end
+			if(ireq_tlast_o) begin
+				ireq_tvalid_o <= 1'b0;
+			end
+
 			if (current_user_valid && current_user_first) begin
+				// 256 bytes as one whole packet
 				packect_transfer_times <= current_user_data[12:8];
 			end
 			else begin
@@ -301,19 +341,19 @@ always @(posedge log_clk) begin
 			// flag, that is the eof bit from FIFO.
 			if (nwr_packect_transfer_cnt == packect_transfer_times) begin 
 				ireq_tlast_o <= current_user_last;
+				
 			end
-			else if (nwr_byte_cnt == 8'd255) begin  // The end of a 64-Dword packect
+			else if (nwr_8byte_cnt == 8'd31) begin  // The end of a 64-Dword packect
 				ireq_tlast_o <= 1'b1;
+
 			end
 			else begin
 				ireq_tlast_o <= 1'b0;
 			end
 
-			if (nwr_packect_transfer_cnt == packect_transfer_times && 
-				nwr_byte_cnt == current_user_size[7:0]) begin
-				nwr_done <= 1;
-			end
-			
+/*			if (nwr_packect_transfer_cnt == packect_transfer_times && 
+				nwr_8byte_cnt == current_user_size[7:0]) beginreg	nwr_done 			end
+*/
 /*		else begin
 			    fifo_rd_en	<= 1'b0;
 				ireq_tdata_o <= current_user_data;
@@ -335,17 +375,24 @@ always @(posedge log_clk) begin
 	end
 end
 //assign fifo_rd_en = (state == NWR_s && ~fifo_empty) ? 1'b1 : 1'b0;
+// One NWR opearation is done
+// When the last dat in reg logic is it is nwr_done
+/*asreg nwr_done _packect_transfer_cnt == packect_transfer_times && 
+					((nwr_8byte_cnt[7:3] == current_user_size[7:3] - 1 && current_user_size[2:0] == 'h0)
+					|| (nwr_8byte_cnt[7:3] == current_user_size[7:3] && current_user_size[2:0] != 'h0)));reg
+					*/
+assign nw_o = nwr_done;
 
 always @(posedge log_clk) begin
 	if (state == NWR_s && current_user_first) begin
-		$display("Now sending NWR packet, and the length is %d", current_user_size+1);
-		$display("The target ID is %x", target_ed_addr);
+		$display("Source->Target: Now sending NWR packet, and the length is %d", current_user_size+1);
+		$display("Source->Target: The target ID is %x", target_ed_addr);
 	end
 end
 
 
 // nwr_srcID control logic
-always @(posedge log_clk) begin
+always @(posedge log_clk ) begin
 	if (log_rst_q) begin
 		bit_reverse <= 'h0;
 	end
@@ -353,6 +400,9 @@ always @(posedge log_clk) begin
 		if (nwr_done) begin
 			bit_reverse <= ~bit_reverse;
 		end
+		else begin
+			bit_reverse <= bit_reverse;
+		end 
 	end
 end
 
@@ -362,13 +412,17 @@ assign nwr_srcID = {7'h0, bit_reverse};
 always @(posedge log_clk) begin
 	if (log_rst_q) begin
 		target_ed_addr <= 'h0;
+		db_req_inform <= 0;
 	end
 	else begin
 		if (~bit_reverse) begin
 			target_ed_addr <= 'h0;
+			// Doorbell content is 0x0200 + n (n=0,1)
+			db_req_inform <= 16'h0200 + 16'h1;  
 		end
 		else begin
 			target_ed_addr	<= (34'h1 << 20);
+			db_req_inform <= 16'h0200;
 		end
 	end
 end
@@ -384,20 +438,20 @@ assign current_resp_addr  = iresp_tdata_in[33:0];
 assign current_resp_db_info = iresp_tdata_in[31:16];
 assign current_resp_srcid = iresp_tuser_in[31:16];
 
-assign get_a_response =  (current_resp_ftype == DOORB	&& current_resp_srcid == 8'hf0 && iresp_tdata_in) ? 1'b1: 1'b0;
+assign get_a_response =  (current_resp_ftype == DOORB && current_resp_srcid == 8'hf0 && iresp_tdata_in) ? 1'b1: 1'b0;
 // Indicate the requested endpoint is ready
 assign target_ready = (get_a_response && current_resp_db_info == 16'h0100) ? 1'b1: 1'b0;
 assign target_busy =  (get_a_response && current_resp_db_info == 16'h01ff) ? 1'b1 : 1'b0;
 
 always @(posedge log_clk) begin
 	if (get_a_response) begin
-		$display("Get a response from target and the src_id is %x.", current_resp_srcid);
-		$display("The inform in the response is %x.",current_resp_db_info);
+		$display("Source->Target: Get a response from target and the src_id is %x.", current_resp_srcid);
+		$display("Source->Target: The inform in the response is %x.",current_resp_db_info);
 		if (target_ready) begin
-			$display("The target endpoint is ready.");
+			$display("Source->Target: The target endpoint is ready.");
 		end
 		else if (target_busy) begin
-			$display("The target endpoint is busy.");
+			$display("Source->Target: The target endpoint is busy.");
 		end
 	end
 
@@ -426,31 +480,6 @@ always @(posedge log_clk) begin
 	end
 end
 
-
-/*always @(posedge log_clk or posedge log_rst) begin
-	if (log_rst) begin
-		ireq_tvalid_o <= 1'b0;
-		ireq_tlast_o <= 1'b0;
-		ireq_tdata_o <= 1'b0;
-		ireq_tkeep_o <= 1'b0;
-		ireq_tuser_o <= 1'b0;
-	end
-	else if (dr_req_p && ireq_tready_in) begin
-		ireq_tdata_o <= db_instr[63:0];
-		ireq_tvalid_o <= 1'b1;
-		ireq_tkeep_o <= 8'hff;
-		ireq_tlast_o <= 1'b1;
-		ireq_tuser_o <= {src_id, des_id};	
-	end
-	else begin
-		ireq_tvalid_o <= 1'b0;
-		ireq_tlast_o <= 1'b0;
-		ireq_tdata_o <= 1'b0;
-		ireq_tkeep_o <= 1'b0;
-		ireq_tuser_o <= 1'b0;
-	end
-end
-*/
 //Logic for user data
 
 assign user_tready_o = ~fifo_full;
@@ -484,7 +513,7 @@ end
 
 assign current_user_size = (user_data_first) ? user_tdata_r[11:0]  : current_user_size;
 
-assign packect_tfransfer_times = current_user_size[11:8];
+//assign packect_transfer_times = current_user_size[11:8];
 assign byte_left = current_user_size[7:0];
 
 always @(posedge fifo_clk) begin

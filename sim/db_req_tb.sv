@@ -83,7 +83,7 @@ module db_req_tb();
     	@(posedge log_clk) begin
     		if (rapidIO_ready) begin
     			dr_req_in <= 1;
-    			$display("Doorbell is requesting",);
+    			$display("Tb:Doorbell is requesting",);
     		end // if (rapidIO_ready)
     	end
     	@(posedge log_clk);
@@ -105,7 +105,7 @@ module db_req_tb();
 	 .src_id(req_src_id),
 	 .des_id(req_des_id),
 
-	.dr_req_in(dr_req_in),
+	.self_check_in(dr_req_in),
 	 .nwr_req_in(nwr_req_in),
 	 .rapidIO_ready_o (rapidIO_ready),
 	.link_initialized(link_initialized),

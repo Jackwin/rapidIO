@@ -7,6 +7,7 @@ module user_logic (
 
 	input wire nwr_ready_in,
 	input wire nwr_busy_in,
+	input wire nwr_done_in,
 
 	input wire user_tready_in,
 	output wire [33:0] user_addr_o,
@@ -21,17 +22,18 @@ module user_logic (
 
 	);
 
-localparam DATA_SIZE0 = 256;
-localparam DATA_SIZE1 = 255;
-localparam DATA_SIZE2 = 254;
-localparam DATA_SIZE3 = 253;
-localparam DATA_SIZE4 = 252;
-localparam DATA_SIZE5 = 251;
-localparam DATA_SIZE6 = 250;
-localparam DATA_SIZE7 = 249;
+localparam DATA_SIZE0 = 255;
+localparam DATA_SIZE1 = 256;
+localparam DATA_SIZE2 = 257;
+localparam DATA_SIZE3 = 258;
+localparam DATA_SIZE4 = 259;
+localparam DATA_SIZE5 = 260;
+localparam DATA_SIZE6 = 512;
+localparam DATA_SIZE7 = 513;
 
 localparam IDLE_s = 2'd0;
 localparam GEN_DATA_s = 2'd1;
+localparam END_s = 2'd2;
 
 reg [2:0] data_sel;
 
@@ -54,6 +56,7 @@ assign user_tdata_o = gen_data;
 always @(user_tlast_o) begin
 	if (user_tlast_o) begin
 		case(user_tsize[2:0]) 
+			// Data placement is from left to high, like little-endian.
 			3'd0: user_tkeep_o = 8'hff;
 			3'h1: user_tkeep_o = 8'h80;
 			3'h2: user_tkeep_o = 8'ha0;
@@ -123,12 +126,18 @@ always @(posedge log_clk or posedge	log_rst) begin
 				end
 
 				if (user_tlast_o) begin
-					state <= IDLE_s;
+					state <= END_s;
 					user_tvalid_o <= 1'b0;
 				end
 				else begin
 					state <= GEN_DATA_s;
 				end // else
+			end
+			END_s: begin
+				data_sel <= 2'h0;
+				gen_data <= 'h0;
+				qword_cnt <= 'h0;
+				byte_cnt <= 'h0;
 			end
 			default: begin
 				state <= IDLE_s;
