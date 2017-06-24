@@ -9,8 +9,8 @@ module db_req (
 	input log_clk,
 	input log_rst,
 
-	input wire [15:0] src_id,
-	input wire [15:0] des_id,
+	input wire [7:0] src_id,
+	input wire [7:0] des_id,
 
 	// Before NWR, the system should finish self-check via doorbell
 	input wire self_check_in,
@@ -260,7 +260,7 @@ always @(posedge log_clk) begin
 					ireq_tvalid_o <= 1'b1;
 					ireq_tkeep_o <= 8'hff;
 					ireq_tlast_o <= 1'b1;
-					ireq_tuser_o <= {src_id, des_id};	
+					ireq_tuser_o <= {8'h0, src_id, 8'h0, des_id};	
 					$display("Source->Target: Self doorbell check");
 				end
 				// Send data integration check
