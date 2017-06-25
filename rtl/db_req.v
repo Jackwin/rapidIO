@@ -169,10 +169,10 @@ always @(posedge log_clk) begin
 	else begin
 		case (state)
 		IDLE_s: begin
-			if (db_req_ena || self_check_in) begin
+			if (db_req_ena || self_check_in && link_initialized) begin
 				state <= DB_REQ_s;
 			end
-			else if (nwr_req_in) begin
+			else if (nwr_req_in && link_initialized) begin
 				state <= NWR_s;
 			end
 			else begin

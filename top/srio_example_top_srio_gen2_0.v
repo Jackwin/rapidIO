@@ -48,17 +48,21 @@
 `timescale 1ps/1ps
 (* DowngradeIPIdentifiedWarnings = "yes" *)
 
-
+`define SIM
 module srio_example_top_srio_gen2_0 #(
-    parameter SIM_VERBOSE               = 1, // If set, generates unsynthesizable reporting
+    parameter SIM_VERBOSE               = 0, // If set, generates unsynthesizable reporting
     parameter VALIDATION_FEATURES       = 1, // If set, uses internal instruction sequences for hw and sim test
-    parameter QUICK_STARTUP             = 1, // If set, quick-launch configuration access is contained here
-    parameter STATISTICS_GATHERING      = 1, // If set, I/O can be rerouted to the maint port [0,1]
+    parameter QUICK_STARTUP             = 0, // If set, quick-launch configuration access is contained here
+    parameter STATISTICS_GATHERING      = 0, // If set, I/O can be rerouted to the maint port [0,1]
     parameter C_LINK_WIDTH              = 1
     )
    //  port declarations ----------------
    (
     // Clocks and Resets
+	`ifdef SIM
+	input 			db_req_gen,
+	`endif
+	
     input            sys_clkp,              // MMCM reference clock
     input            sys_clkn,              // MMCM reference clock
 
@@ -77,7 +81,7 @@ module srio_example_top_srio_gen2_0 #(
     output 			si53301_OEB,
     output 			si53301_CLKSEL,
 
-    input           sim_train_en,           // Set this only when simulating to reduce the size of counters
+   // input           sim_train_en,           // Set this only when simulating to reduce the size of counters
     output  [1:0]   led0
 
    );
@@ -289,18 +293,18 @@ wire                      gt_rxdfelpmreset_in  ;
     wire    [31:0]  axis_iresp_tuser;
 
     wire            axis_treq_tvalid;
-    wire            axis_treq_tready;
+    wire            axis_treq_tready = 1'b1;
     wire            axis_treq_tlast;
     wire    [63:0]  axis_treq_tdata;
     wire    [7:0]   axis_treq_tkeep;
     wire    [31:0]  axis_treq_tuser;
 
-    wire            axis_tresp_tvalid;
+    wire            axis_tresp_tvalid = 1'b0;
     wire            axis_tresp_tready;
-    wire            axis_tresp_tlast;
-    wire   [63:0]   axis_tresp_tdata;
-    wire   [7:0]    axis_tresp_tkeep;
-    wire   [31:0]   axis_tresp_tuser;
+    wire            axis_tresp_tlast = 1'b0;
+    wire   [63:0]   axis_tresp_tdata = 'h0;
+    wire   [7:0]    axis_tresp_tkeep = 'h0;
+    wire   [31:0]   axis_tresp_tuser ='h0;
 
     wire            axis_maintr_rst = 1'b0;
     wire            axis_maintr_awvalid = 1'b0;
@@ -397,6 +401,83 @@ wire                      gt_rxdfelpmreset_in  ;
 
  //Added by Chunjie
   wire sys_rst;
+  
+   wire [7:0] src_id = 8'h01;
+  wire [7:0] des_id = 8'hf0;
+
+  wire rapidIO_ready;
+  wire nwr_ready;
+  wire nwr_busy;
+  wire nwr_done;
+  reg nwr_req_p;
+  reg nwr_ready_r0, nwr_ready_r1;
+  
+  wire user_ready;
+  wire [33:0] user_taddr;
+  wire user_tready	;
+  wire [11:0] user_tsize;
+  
+  wire [63:0] user_tdata;
+  wire user_tvalid;
+  wire [7:0] user_tkeep;
+  wire user_tlast;
+  
+  reg [12:0] initialized_cnt;
+  reg initialized_delay, initialized_delay_r;
+  
+ /* wire ireq_tvalid;
+  wire ireq_tready;
+  wire ireq_tlast;
+  wire [63:0] ireq_tdata;
+  wire [7:0] ireq_tkeep;
+  wire [31:0] ireq_tuser;
+  
+  wire iresp_tvalid;
+  wire iresp_tready;
+  wire iresp_tlast;
+  wire [63:0] iresp_tdata;
+  wire [7:0] iresp_tkeep;
+  wire [31:0] iresp_tuser;
+  */
+  // signals for target endpoint
+
+  wire ed_ready;
+ /* wire treq_tvalid;
+  wire treq_tready;
+  wire treq_tlast;
+  wire [63:0] treq_tdata;
+  wire [7:0] treq_tkeep;
+  wire [31:0] treq_tuser;
+
+  wire tresp_tready;
+  wire tresp_tvalid;
+  wire tresp_tlast;
+  wire [63:0] tresp_tdata;
+  wire [7:0] tresp_tkeep;
+  wire [31:0] tresp_tuser;
+  */
+  // enable pulse 
+  reg db_self_check_en, db_self_check_r;
+  wire [0:0] db_self_check;
+  reg nwr_req_en, nwr_req_en_r;
+  wire [0:0] nwr_req;
+  
+  // Debug signals
+  wire [0:0] mode_1x_vio;
+  wire [0:0] port_initialized_vio;
+  wire [0:0] link_initialized_vio;
+  wire [0:0] clk_lock_vio;
+   
+  wire [0:0] nwr_ready_ila;
+  wire [0:0] nwr_busy_ila;
+  
+  wire [0:0] nwr_done_ila;
+  wire [0:0] link_initialized_ila;
+  wire [0:0] user_tready_ila;
+  wire [0:0] ireq_tvalid_ila;
+  wire [0:0] ireq_tlast_ila;
+  
+  wire sim_train_en = 1'b0;
   assign sys_rst = ~sys_rst_n;
   // {{{ Drive LEDs to Development Board -------
    // assign led0[0] = 1'b1;
@@ -421,9 +502,6 @@ wire                      gt_rxdfelpmreset_in  ;
     assign core_sent_pr      = phy_debug[162];
     assign core_received_pr  = phy_debug[163];
 
-
-
-
       assign continuous_go        = 1'b0;
       assign peek_poke_go         = 1'b0;
       assign user_addr            = 24'b0;
@@ -443,7 +521,197 @@ wire                      gt_rxdfelpmreset_in  ;
    assign si53301_OEA = 1'bz;
    assign si53301_OEB = 1'bz;
    assign si53301_CLKSEL = 1'b0;
+   
+  assign mode_1x_vio[0] = mode_1x;
+  assign port_initialized_vio[0] = port_initialized;
+  assign link_initialized_vio[0] = link_initialized;
+  assign clk_lock_vio[0] = clk_lock;
 
+  assign nwr_ready_ila[0] = nwr_ready;
+  assign nwr_busy_ila[0] = nwr_busy;
+  assign nwr_done_ila[0] = nwr_done;
+  assign link_initialized_ila[0] = link_initialized;
+  assign user_tready_ila[0] = user_tready;
+  assign ireq_tvalid_ila[0] = ireq_tvalid;
+  assign ireq_tlast_ila[0] = ireq_tlast;
+   
+   // Generate doorbell self-check enable and nwr request enable by VIO
+   `ifndef SIM
+   	always @(posedge log_clk) begin
+		if (log_rst) begin
+			db_self_check_en <= 1'b0;
+			db_self_check_r <= 1'b0;
+			nwr_req_en <= 1'b0;
+			nwr_req_en_r <= 1'b0;
+		end
+	else begin
+		db_self_check_r <= db_self_check[0];
+		db_self_check_en <= !db_self_check_r & db_self_check[0];
+		nwr_req_en_r <= nwr_req[0];
+		nwr_req_en <= !nwr_req_en_r & nwr_req[0] ;
+		end
+	end
+	`endif
+	
+	// Used only in simulation to generate doorbell request
+	`ifdef SIM
+	always @(posedge log_clk) begin
+		if (log_rst) begin
+			initialized_cnt <= 'h0;
+		end
+		else if (link_initialized && ~initialized_delay) begin
+			initialized_cnt <= initialized_cnt + 'h1;
+		end
+		else if (!link_initialized) begin
+			initialized_cnt <= 'h0;
+		end
+	end
+	
+	assign initialized_delay = initialized_cnt[12];
+	
+	// Generate doorbell self-check enable pulse
+	always @(posedge log_clk) begin
+		if (log_rst) begin
+			initialized_delay_r <= 1'b0;
+		end
+		else begin
+			initialized_delay_r <= initialized_delay;
+			db_self_check_en <= ~initialized_delay_r & initialized_delay;
+		end
+	end
+	
+	// Generate NWR enable pulse
+	always @(posedge log_clk) begin
+		if (log_rst) begin
+			nwr_ready_r0 <= 1'b0;
+			nwr_ready_r1 <= 1'b1;
+		end
+		else begin
+			nwr_ready_r0 <= nwr_ready;
+			nwr_ready_r1 <= nwr_ready_r0;
+			nwr_req_en <= ~nwr_ready_r1 & nwr_ready_r0;
+		end
+	end
+	
+	`endif
+	
+	generate if (!VALIDATION_FEATURES) begin: db_req_gen
+	
+	db_req db_req_i
+		(
+		.log_clk(log_clk),
+		.log_rst(log_rst),
+		
+		.src_id(src_id),
+		.des_id(des_id),
+		
+		.self_check_in(db_self_check_en),
+		.nwr_req_in(nwr_req_en),
+		.rapidIO_ready_o(rapidIO_ready),
+		.link_initialized(link_initialized),
+		
+		.nwr_ready_o(nwr_ready),
+		.nwr_busy_o(nwr_busy),
+		.nwr_done_o(nwr_done),
+		
+		.user_tready_o(user_tready),
+		.user_addr(user_taddr),
+		.user_tsize_in(user_tsize),
+		
+		.user_tdata_in(user_tdata),
+		.user_tvalid_in(user_tvalid),
+		.user_tkeep_in(user_tkeep),
+		.user_tlast_in(user_tlast),
+		
+		.ireq_tvalid_o(ireq_tvalid),
+		.ireq_tready_in(ireq_tready),
+		.ireq_tlast_o(ireq_tlast),
+		.ireq_tdata_o(ireq_tdata),
+		.ireq_tkeep_o(ireq_tkeep),
+		.ireq_tuser_o(ireq_tuser),
+		
+		.iresp_tvalid_in(iresp_tvalid),
+		.iresp_tready_o(iresp_tready),
+		.iresp_tlast_in(iresp_tlast),
+		.iresp_tdata_in(iresp_tdata),
+		.iresp_tkeep_in(iresp_tkeep),
+		.iresp_tuser_in(iresp_tuser)
+		);
+	user_logic user_logic_i
+	(
+		.log_clk(log_clk),
+		.log_rst(log_rst),
+		
+		.nwr_ready_in(nwr_ready),
+		.nwr_busy_in(nwr_busy),
+		.nwr_done_in(nwr_done),
+		
+		.user_tready_in(user_tready),
+		.user_addr_o(user_taddr),
+		.user_tsize_o(user_tsize),
+		.user_tdata_o(user_tdata),
+		.user_tvalid_o(user_tvalid),
+		.user_tkeep_o(user_tkeep),
+		.user_tlast_o(user_tlast)
+		
+	);
+	
+	// db_resp is used to simulate the bahavor of target, when synthesize, comment it.
+    db_resp db_resp_i
+  (
+      .log_clk(log_clk),
+      .log_rst(log_rst),
+  
+      .src_id(8'hf0),
+      .des_id(8'h01),
+  
+      .ed_ready_in(ed_ready),
+  
+      .treq_tvalid_in(treq_tvalid),
+      .treq_tready_o(treq_tready),
+      .treq_tlast_in(treq_tlast),
+      .treq_tdata_in(treq_tdata),
+      .treq_tkeep_in(treq_tkeep),
+      .treq_tuser_in(treq_tuser),
+  
+      // response interface
+      .tresp_tready_in(tresp_tready),
+      .tresp_tvalid_o(tresp_tvalid),
+      .tresp_tlast_o(tresp_tlast),
+      .tresp_tdata_o(tresp_tdata),
+      .tresp_tkeep_o(tresp_tkeep),    
+      .tresp_tuser_o(tresp_tuser)
+      );
+	  
+	`ifndef SIM
+	vio_0 vio_i (
+	.clk(log_clk),                // input wire clk
+	.probe_in0(mode_1x_vio),    // input wire [0 : 0] probe_in0
+	.probe_in1(port_initialized_vio),    // input wire [0 : 0] probe_in1
+	.probe_in2(link_initialized_vio),    // input wire [0 : 0] probe_in2
+	.probe_in3(clk_lock_vio),    // input wire [0 : 0] probe_in3
+	.probe_in4(clk_lock_vio),    // input wire [0 : 0] probe_in4
+	.probe_out0(db_self_check),  // output wire [0 : 0] probe_out0
+	.probe_out1(nwr_req)  // output wire [0 : 0] probe_out1
+);
+
+	ila_0 ila_i (
+		.clk(log_clk), // input wire clk
+		.probe0(nwr_ready_ila), // input wire [0:0]  probe0  
+		.probe1(nwr_busy_ila), // input wire [0:0]  probe1 
+		.probe2(nwr_done_ila), // input wire [0:0]  probe2 
+		.probe3(link_initialized_ila), // input wire [0:0]  probe3 
+		.probe4(user_tready_ila), // input wire [0:0]  probe4 
+		.probe5(ireq_tvalid_ila), // input wire [0:0]  probe5 
+		.probe6(ireq_tlast_ila), // input wire [0:0]  probe6 
+		.probe7(ireq_tuser), // input wire [31:0]  probe7 
+		.probe8(ireq_tdata), // input wire [63:0]  probe8 
+		.probe9(ireq_tkeep) // input wire [7:0]  probe9
+	);
+	`endif
+	end
+endgenerate
+//end
 
   // feed back the last captured data to VIO
   always @(posedge log_clk) begin
@@ -644,133 +912,8 @@ wire                      gt_rxdfelpmreset_in  ;
   assign axis_ireq_tready = (!VALIDATION_FEATURES) && ireq_tready;
   assign val_ireq_tready  = (VALIDATION_FEATURES)  && ireq_tready;
 	
-  wire [7:0] src_id = 8'h01;
-  wire [7:0] des_id = 8'hf0;
-
-  wire rapidIO_ready;
-  wire nwr_ready;
-  wire nwr_busy;
-  wire nwr_done;
-  
-  wire user_ready;
-  wire [33:0] user_taddr;
-  wire user_tready	;
-  wire [11:0] user_tsize;
-  
-  wire [63:0] user_tdata;
-  wire user_tvalid;
-  wire [7:0] user_tkeep;
-  wire user_tlast;
-  
-  wire ireq_tvalid;
-  wire ireq_tready;
-  wire ireq_tlast;
-  wire [63:0] ireq_tdata;
-  wire [7:0] ireq_tkeep;
-  wire ireq_tlast;
-  wire [31:0] ireq_tuser;
-  
-  wire iresp_tvalid;
-  wire iresp_tready;
-  wire iresp_tlast;
-  wire [63:0] iresp_tdata;
-  wire [7:0] iresp_tkeep;
-  wire [31:0] iresp_tuser;
-  
-  // enable pulse 
-  reg db_self_check_en, db_self_check_r;
-  wire db_self_check[0:0];
-  reg nwr_req_en, nwr_req_r;
-  wire nwr_req[0:0];
-  
-	always @(posedge log_clk) begin
-		if (log_rst) begin
-			db_self_check_en <= 1'b0;
-			db_self_check_r <= 1'b0;
-			nwr_req_en <= 1'b0;
-			nwr_req_r <= 1'b0;
-		end
-	else begin
-		db_self_check_r <= db_self_check[0];
-		db_self_check_en <= ~db_self_check & db_self_check[0];
-		nwr_req_r <= nwr_req[0];
-		nwr_req_en <= ~db_self_check & db_self_check[0];
-		end
-	end
-  
- 
-	db_req db_req_i
-		(
-		.log_clk(log_clk),
-		.log_rst(log_rst),
-		
-		.src_id(src_id),
-		.des_id(des_id),
-		
-		.self_check_in(self_check),
-		.nwr_req_in(nwr_req),
-		.rapidIO_ready_o(rapidIO_ready),
-		.link_initialized(link_initialized),
-		
-		.nwr_ready_o(nwr_ready),
-		.nwr_busy_o(nwr_busy),
-		.nwr_done_o(nwr_done),
-		
-		.go(),
-		.user_ready_o(user_tready),
-		.user_addr(user_taddr),
-		.user_tsize_in(user_tsize),
-		
-		.user_tdata_in(user_tdata),
-		.user_tvalid_in(user_tvalid),
-		.user_tkeep_in(user_tkeep),
-		.user_tlast_in(user_tlast),
-		
-		.ireq_tvalid_o(ireq_tvalid),
-		.ireq_tready_in(ireq_tready),
-		.ireq_tlast_o(ireq_tlast),
-		.ireq_tdata_o(ireq_tdata),
-		.ireq_tkeep_o(ireq_tkeep),
-		.ireq_tuser_o(ireq_tuser),
-		
-		.iresp_tvalid_in(iresp_tvalid),
-		.iresp_tready_o(iresp_tready),
-		.iresp_tlast_in(iresp_tlast),
-		.iresp_tdata_in(iresp_tdata),
-		.iresp_tkeep_in(iresp_tkeep),
-		iresp_tuser_in(iresp_tuser)
-		);
-	user_logic user_logic_i
-	(
-		.log_clk(log_clk),
-		.log_rst(log_rst),
-		
-		.nwr_ready_in(nwr_ready),
-		.nwr_busy_in(nwr_busy),
-		.nwr_done_in(nwr_done),
-		
-		.user_tready_in(user_tready),
-		.user_addr_o(user_taddr),
-		.user_tsize_o(user_tsize),
-		.user_tdata_o(user_tdata),
-		.user_tvalid_o(user_tvalid),
-		.user_tkeep_o(user_tkeep),
-		.user_tlast_o(user_tlast)
-		
-	);
-	
-	vio_0 your_instance_name (
-	.clk(log_clk),                // input wire clk
-	.probe_in0(probe_in0),    // input wire [0 : 0] probe_in0
-	.probe_in1(probe_in1),    // input wire [0 : 0] probe_in1
-	.probe_in2(probe_in2),    // input wire [0 : 0] probe_in2
-	.probe_in3(probe_in3),    // input wire [0 : 0] probe_in3
-	.probe_in4(probe_in4),    // input wire [0 : 0] probe_in4
-	.probe_out0(db_self_check),  // output wire [0 : 0] probe_out0
-	.probe_out1(nwr_req_en)  // output wire [0 : 0] probe_out1
 
 
-/*
   // When enabled, report results.
   // This is a simulation-only option and cannot be synthesized
   generate if (SIM_VERBOSE) begin: ireq_reporting_gen
@@ -903,12 +1046,13 @@ wire                      gt_rxdfelpmreset_in  ;
 
   // {{{ TRESP Interface --------------------------
   // Select between internally-driven sequences or user sequences
+  `ifndef SIM
   assign tresp_tvalid = (VALIDATION_FEATURES) ? val_tresp_tvalid : axis_tresp_tvalid;
   assign tresp_tlast  = (VALIDATION_FEATURES) ? val_tresp_tlast  : axis_tresp_tlast;
   assign tresp_tdata  = (VALIDATION_FEATURES) ? val_tresp_tdata  : axis_tresp_tdata;
   assign tresp_tkeep  = (VALIDATION_FEATURES) ? val_tresp_tkeep  : axis_tresp_tkeep;
   assign tresp_tuser  = (VALIDATION_FEATURES) ? val_tresp_tuser  : axis_tresp_tuser;
-
+`endif
   assign axis_tresp_tready = (!VALIDATION_FEATURES) && tresp_tready;
   assign val_tresp_tready  = (VALIDATION_FEATURES)  && tresp_tready;
 
@@ -970,9 +1114,9 @@ wire                      gt_rxdfelpmreset_in  ;
 
   // {{{ TREQ Interface ---------------------------
   // Select between internally-driven sequences or user sequences
-
+`ifndef SIM
   assign treq_tready = (VALIDATION_FEATURES) ? val_treq_tready : axis_treq_tready;
-
+`endif
   assign val_treq_tvalid  = (VALIDATION_FEATURES) && treq_tvalid;
   assign val_treq_tlast   = treq_tlast;
   assign val_treq_tdata   = treq_tdata;
@@ -1008,11 +1152,6 @@ wire                      gt_rxdfelpmreset_in  ;
   end
   endgenerate
   // }}} End of TREQ Interface --------------------
-
-  // control Si53301
-   assign si53301_OEA = 1'bz;
-   assign si53301_OEB = 1'bz;
-   assign si53301_CLKSEL = 1'b0;
 
 
 
@@ -1155,5 +1294,5 @@ wire                      gt_rxdfelpmreset_in  ;
   endgenerate
 
   // }}} End of Statistics Gatherer ---------------
-*/
+
 endmodule
