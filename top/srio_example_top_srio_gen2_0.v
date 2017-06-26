@@ -51,7 +51,7 @@
 `define SIM
 module srio_example_top_srio_gen2_0 #(
     parameter SIM_VERBOSE               = 0, // If set, generates unsynthesizable reporting
-    parameter VALIDATION_FEATURES       = 1, // If set, uses internal instruction sequences for hw and sim test
+    parameter VALIDATION_FEATURES       = 0, // If set, uses internal instruction sequences for hw and sim test
     parameter QUICK_STARTUP             = 0, // If set, quick-launch configuration access is contained here
     parameter STATISTICS_GATHERING      = 0, // If set, I/O can be rerouted to the maint port [0,1]
     parameter C_LINK_WIDTH              = 1
@@ -59,9 +59,6 @@ module srio_example_top_srio_gen2_0 #(
    //  port declarations ----------------
    (
     // Clocks and Resets
-	`ifdef SIM
-	input 			db_req_gen,
-	`endif
 	
     input            sys_clkp,              // MMCM reference clock
     input            sys_clkn,              // MMCM reference clock
@@ -82,7 +79,12 @@ module srio_example_top_srio_gen2_0 #(
     output 			si53301_CLKSEL,
 
    // input           sim_train_en,           // Set this only when simulating to reduce the size of counters
+   `ifdef SIM
+	output [3:0] led0
+	`else
     output  [1:0]   led0
+	`endif
+	
 
    );
    //  ----------------------------------
@@ -423,8 +425,8 @@ wire                      gt_rxdfelpmreset_in  ;
   wire user_tlast;
   
   reg [12:0] initialized_cnt;
-  reg initialized_delay, initialized_delay_r;
-  
+  reg  initialized_delay_r;
+  wire initialized_delay;
  /* wire ireq_tvalid;
   wire ireq_tready;
   wire ireq_tlast;
@@ -479,12 +481,21 @@ wire                      gt_rxdfelpmreset_in  ;
   
   wire sim_train_en = 1'b0;
   assign sys_rst = ~sys_rst_n;
+  `ifdef SIM
+	assign led0[0] = !mode_1x;
+    assign led0[1] = port_initialized;
+    assign led0[2] = link_initialized;
+	assign led0[3] = clk_lock;
+	`else
+	assign led0[0] = !mode_1x;
+    assign led0[1] = ~link_initialized;
+	`endif
   // {{{ Drive LEDs to Development Board -------
    // assign led0[0] = 1'b1;
    // assign led0[1] = 1'b1;
-    assign led0[0] = !mode_1x;
+   // assign led0[0] = !mode_1x;
    // assign led0[1] = port_initialized;
-    assign led0[1] = ~link_initialized;
+   // assign led0[1] = ~link_initialized;
    // assign led0[3] = clk_lock;
   //  assign led0[6] = sim_train_en ? autocheck_error : 1'b0;
   //  assign led0[7] = sim_train_en ? exercise_done : 1'b0;
