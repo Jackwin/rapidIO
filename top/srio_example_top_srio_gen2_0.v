@@ -443,7 +443,7 @@ wire                      gt_rxdfelpmreset_in  ;
   */
   // signals for target endpoint
 
-  wire ed_ready;
+  wire [1:0] ed_ready = 2'd1;
  /* wire treq_tvalid;
   wire treq_tready;
   wire treq_tlast;

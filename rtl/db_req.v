@@ -443,19 +443,26 @@ assign get_a_response =  (current_resp_ftype == DOORB && current_resp_srcid == 8
 assign target_ready = (get_a_response && current_resp_db_info == 16'h0100) ? 1'b1: 1'b0;
 assign target_busy =  (get_a_response && current_resp_db_info == 16'h01ff) ? 1'b1 : 1'b0;
 
-always @(posedge log_clk) begin
-	if (get_a_response) begin
-		$display("Source->Target: Get a response from target and the src_id is %x.", current_resp_srcid);
-		$display("Source->Target: The inform in the response is %x.",current_resp_db_info);
-		if (target_ready) begin
+always @(posedge get_a_response) begin
+	//if (get_a_response) begin
+	$display("Source->Target: Get a response from target and the src_id is %x.", current_resp_srcid);
+	$display("Source->Target: The inform in the response is %x.",current_resp_db_info);
+/*		if (target_ready) begin
 			$display("Source->Target: The target endpoint is ready.");
 		end
 		else if (target_busy) begin
 			$display("Source->Target: The target endpoint is busy.");
 		end
-	end
-
+	//end
+*/
 end
+
+always @(posedge target_ready) begin
+	$display("Source->Target: The target endpoint is ready.");
+end
+always @(posedge target_ready) begin
+	$display("Source->Target: The target endpoint is busy.");
+end	
 
 /*
 1. consider about the relationship of user size and packet size
