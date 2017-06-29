@@ -48,7 +48,7 @@
 `timescale 1ps/1ps
 (* DowngradeIPIdentifiedWarnings = "yes" *)
 
-`define SIM
+//`define SIM
 module srio_example_top_srio_gen2_0 #(
     parameter SIM_VERBOSE               = 0, // If set, generates unsynthesizable reporting
     parameter VALIDATION_FEATURES       = 0, // If set, uses internal instruction sequences for hw and sim test
@@ -1057,13 +1057,13 @@ endgenerate
 
   // {{{ TRESP Interface --------------------------
   // Select between internally-driven sequences or user sequences
-  `ifndef SIM
+/*  `ifndef SIM
   assign tresp_tvalid = (VALIDATION_FEATURES) ? val_tresp_tvalid : axis_tresp_tvalid;
   assign tresp_tlast  = (VALIDATION_FEATURES) ? val_tresp_tlast  : axis_tresp_tlast;
   assign tresp_tdata  = (VALIDATION_FEATURES) ? val_tresp_tdata  : axis_tresp_tdata;
   assign tresp_tkeep  = (VALIDATION_FEATURES) ? val_tresp_tkeep  : axis_tresp_tkeep;
   assign tresp_tuser  = (VALIDATION_FEATURES) ? val_tresp_tuser  : axis_tresp_tuser;
-`endif
+`endif*/
   assign axis_tresp_tready = (!VALIDATION_FEATURES) && tresp_tready;
   assign val_tresp_tready  = (VALIDATION_FEATURES)  && tresp_tready;
 
@@ -1125,9 +1125,11 @@ endgenerate
 
   // {{{ TREQ Interface ---------------------------
   // Select between internally-driven sequences or user sequences
+  /*
 `ifndef SIM
   assign treq_tready = (VALIDATION_FEATURES) ? val_treq_tready : axis_treq_tready;
 `endif
+*/
   assign val_treq_tvalid  = (VALIDATION_FEATURES) && treq_tvalid;
   assign val_treq_tlast   = treq_tlast;
   assign val_treq_tdata   = treq_tdata;

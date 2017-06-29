@@ -11,8 +11,8 @@ module user_logic (
 
 	input wire user_tready_in,
 	output wire [33:0] user_addr_o,
-    output wire [3:0] user_ftype_o,
-    output wire [3:0] user_ttype_o,
+
+
     output wire [11:0] user_tsize_o,
 
     output wire [63:0] user_tdata_o,

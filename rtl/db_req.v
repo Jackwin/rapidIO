@@ -23,7 +23,7 @@ module db_req (
 	output reg nwr_busy_o,
 	output reg nwr_done_o,
 
-	output go,
+	
 	output wire user_tready_o,
 	input wire [33:0] user_addr,
     input wire [3:0] user_ftype,
@@ -518,7 +518,7 @@ always @(posedge log_clk) begin
 end
 */
 
-assign current_user_size = (user_data_first) ? user_tdata_r[11:0]  : current_user_size;
+assign current_user_size = (user_data_first) ? user_tdata_r[7:0]  : current_user_size;
 
 //assign packect_transfer_times = current_user_size[11:8];
 assign byte_left = current_user_size[7:0];
