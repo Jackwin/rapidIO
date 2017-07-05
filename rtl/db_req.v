@@ -21,7 +21,7 @@ module db_req (
 	// Indicate NWR is ready to receive data from user logic
 	output reg nwr_ready_o,
 	output reg nwr_busy_o,
-	output reg nwr_done_o,
+	output wire nwr_ack_done_o,
 
 	
 	output wire user_tready_o,
@@ -34,7 +34,14 @@ module db_req (
     input wire user_tvalid_in,
     input wire [7:0] user_tkeep_in,
     input wire user_tlast_in,
+	
     //Bytelength
+	
+	output wire 	error_out,
+	// Error 01 : No response to doorbell request 
+	// Error 10 : No response to data integration request
+	output wire [1:0] error_type_o,
+	output wire [7:0] error_target_id,
 
 	output reg 			ireq_tvalid_o,
 	input wire 			ireq_tready_in,
@@ -69,7 +76,8 @@ localparam [2:0] IDLE_s = 3'h0;
 localparam [2:0] DB_REQ_s = 3'h1;
 localparam [2:0] DB_RESP_s = 3'h2;
 localparam [2:0] NWR_s = 3'h3;
-localparam [2:0] END_s = 3'h4;
+localparam [2:0] INTEG_DB_REQ_s = 3'h4;
+localparam [2:0] WAIT_TARGET_ACK_s = 3'd5;
 reg [2:0] state;
 
 reg  [15:0] log_rst_shift;
@@ -79,18 +87,23 @@ wire        log_rst_q;
 wire [63:0] nwr_instr;
 reg nwr_first_beat;
 wire nwr_advance_condition;
-reg nwr_done ;
+wire nwr_done ;
 wire [7:0] nwr_srcID;
 reg [33:0] target_ed_addr;
 // After the NWR operation, enable doorbell request and send the address (0x0200+n)
 reg db_req_ena;
 reg [15:0] db_req_inform;
 
-
 // Update the source ID
 reg bit_reverse;
 
 reg dr_req_r1, dr_req_p;
+
+// Timer to wait the data received confirm from target
+reg [9:0] timer_cnt;
+reg over_time;
+wire target_confirm;
+wire target_ack;
 
 
 // Response signals
@@ -149,18 +162,6 @@ always @(posedge log_clk or posedge log_rst) begin
 end
 assign log_rst_q = log_rst_shift[15];
 
-// put a sufficient delay on the initialization to improve simulation time.
-// Not needed for actual hardware but does no damage if kept.
-/*always @(posedge log_clk) begin
-    if (log_rst_q) begin
-      link_initialized_cnt <= 0;
-    end else if (link_initialized && !link_initialized_delay) begin
-      link_initialized_cnt <= link_initialized_cnt + 1'b1;
-    end else if (!link_initialized) begin
-      link_initialized_cnt <= 0;
-    end
- end
-*/
 
 always @(posedge log_clk) begin
 	if (log_rst_q) begin
@@ -169,7 +170,7 @@ always @(posedge log_clk) begin
 	else begin
 		case (state)
 		IDLE_s: begin
-			if (db_req_ena || self_check_in && link_initialized) begin
+			if (self_check_in && link_initialized) begin
 				state <= DB_REQ_s;
 			end
 			else if (nwr_req_in && link_initialized) begin
@@ -196,21 +197,43 @@ always @(posedge log_clk) begin
 				nwr_busy_o <= 1'b1;
 				state <= IDLE_s;
 			end
+			else if (over_time) begin
+				state <= IDLE_s;
+			end
 			else begin
 				nwr_ready_o <= 1'b0;
 				nwr_busy_o <= 1'b0;
 				state <= DB_RESP_s;
-			end
+			end		
 		end
 		NWR_s: begin
 			nwr_ready_o <= 1'b0;
 			if (nwr_done) begin
-				state <= IDLE_s	;
+				state <= INTEG_DB_REQ_s	;
 			end
 			else begin
 				state <= NWR_s;
 			end
 		end
+		INTEG_DB_REQ_s: begin
+			state <= WAIT_TARGET_ACK_s;
+		end
+		WAIT_TARGET_ACK_s: begin
+			if (target_ack) begin
+				state <= IDLE_s;
+				$display($time);
+				$display("Data integration confirm from target.");
+			end
+			else if (over_time) begin
+				state <= IDLE_s;
+				$display($time);
+				$display("No data integration confirm from target.");
+			end
+			else begin
+				state <= WAIT_TARGET_ACK_s;
+			end
+		end
+			
 		default: begin
 			state <= IDLE_s;
 		end
@@ -231,9 +254,11 @@ always @(posedge log_clk) begin
 		nwr_byte_cnt <= 'h0;
 		nwr_8byte_cnt <= 'h0;
 		nwr_packect_transfer_cnt <= 'h0;
-		nwr_done <= 1'b0;
+	//	nwr_done <= 1'b0;
 		rapidIO_ready_o <= 1'b1;
-		db_req_ena <= 1'b0;
+	//	db_req_ena <= 1'b0;
+		over_time <= 1'b0;
+		timer_cnt <= 'h0;
 	end
 	else begin
 		ireq_tvalid_o <= 1'b0;
@@ -243,45 +268,52 @@ always @(posedge log_clk) begin
 		ireq_tuser_o <= 1'b0;
 		ireq_tvalid_o <= 1'b0;
 		fifo_rd_en	<= 1'b0;
-		nwr_done <= 1'b0;
+	//	nwr_done <= 1'b0;
 		rapidIO_ready_o <= 1'b1;
+		over_time <= 1'b0;
 		case (state)
 		IDLE_s: begin
 			rapidIO_ready_o <= 1'b1;
-			db_req_ena <= db_req_ena;
+		//	db_req_ena <= db_req_ena;
 		end
 		DB_REQ_s: begin
 			rapidIO_ready_o <= 1'b0;
-			db_req_ena <= 1'b0;
+		//	db_req_ena <= 1'b0;
 			if (ireq_tready_in) begin
 				// Send self-check 
-				if (~db_req_ena) begin
-					ireq_tdata_o <= db_instr[63:0];
-					ireq_tvalid_o <= 1'b1;
-					ireq_tkeep_o <= 8'hff;
-					ireq_tlast_o <= 1'b1;
-					ireq_tuser_o <= {8'h0, src_id, 8'h0, des_id};	
-					$display("Source->Target: Self doorbell check");
-				end
-				// Send data integration check
-				else begin
-					ireq_tdata_o <= {db_instr[63:32],db_req_inform,16'h0};
-					ireq_tvalid_o <= 1'b1;
-					ireq_tkeep_o <= 8'hff;
-					ireq_tlast_o <= 1'b1;
-					ireq_tuser_o <= {src_id, des_id};
-					$display("Source->Target: Data integration doorbell reqest");
-					$display("Source->Target: Address is %x",db_req_inform);
-				end
+				ireq_tdata_o <= db_instr[63:0];
+				ireq_tvalid_o <= 1'b1;
+				ireq_tkeep_o <= 8'hff;
+				ireq_tlast_o <= 1'b1;
+				ireq_tuser_o <= {8'h0, src_id, 8'h0, des_id};	
+				$display($time);
+				$display("Source->Target: Self doorbell check");
 			end
+				// Send data integration check
+/*			else begin
+				ireq_tdata_o <= {db_instr[63:32],db_req_inform,16'h0};
+				ireq_tvalid_o <= 1'b1;
+				ireq_tkeep_o <= 8'hff;
+				ireq_tlast_o <= 1'b1;
+				ireq_tuser_o <= {src_id, des_id};
+				$display("Source->Target: Data integration doorbell reqest");
+				$display("Source->Target: Address is %x",db_req_inform);
+			end
+			*/
 		end
 		DB_RESP_s: begin
 			rapidIO_ready_o <= 1'b0;
-			db_req_ena <= 1'b0;
+			if (timer_cnt == 10'h3ff) begin
+				over_time <= 1'b1;
+			end
+			else begin
+				timer_cnt <= timer_cnt + 'h1;
+			end
+		//	db_req_ena <= 1'b0;
 		end
 		NWR_s: begin
 			// Enable doorbell request
-			db_req_ena <= 1'b1;
+		//	db_req_ena <= 1'b1;
 
 			rapidIO_ready_o <= 1'b0;
 		
@@ -323,7 +355,7 @@ always @(posedge log_clk) begin
 			// current_user_last means the last of the user data, so everything should be cleared, and set nwr_done
 			if (current_user_last) begin
 				nwr_8byte_cnt <= 'h0;
-				nwr_done <= 1'b1;
+				//nwr_done <= 1'b1;
 			end
 			if(ireq_tlast_o) begin
 				ireq_tvalid_o <= 1'b0;
@@ -351,23 +383,27 @@ always @(posedge log_clk) begin
 				ireq_tlast_o <= 1'b0;
 			end
 
-/*			if (nwr_packect_transfer_cnt == packect_transfer_times && 
-				nwr_8byte_cnt == current_user_size[7:0]) beginreg	nwr_done 			end
-*/
-/*		else begin
-			    fifo_rd_en	<= 1'b0;
-				ireq_tdata_o <= current_user_data;
-				ireq_tkeep_o <= current_user_keep;
-				ireq_tvalid_o <= current_user_valid;
-
-				nwr_packect_transfer_cnt <= nwr_packect_transfer_cnt;
-				ireq_tlast_o <= ireq_tlast_o;
-				nwr_byte_cnt <= nwr_byte_cnt;
-
-			end
-			*/
 		end // NWR_s:
-
+		INTEG_DB_REQ_s: begin
+			ireq_tdata_o <= {db_instr[63:32],db_req_inform,16'h0};
+			ireq_tvalid_o <= 1'b1;
+			ireq_tkeep_o <= 8'hff;
+			ireq_tlast_o <= 1'b1;
+			ireq_tuser_o <= {src_id, des_id};
+			$display($time);
+			$display("Source->Target: Data integration doorbell reqest, and the address is %x", db_req_inform);
+			//$display("Source->Target: Address is %x",db_req_inform);
+		end
+		WAIT_TARGET_ACK_s: begin
+			timer_cnt <= timer_cnt + 'h1;
+			if (timer_cnt == 10'h3ff) begin
+				over_time <= 1'b1;
+			end
+			else begin
+				timer_cnt <= timer_cnt + 'h1;
+			end
+				
+		end	
 		default: begin
 			rapidIO_ready_o <= 1'b1;
 		end
@@ -381,12 +417,29 @@ end
 					((nwr_8byte_cnt[7:3] == current_user_size[7:3] - 1 && current_user_size[2:0] == 'h0)
 					|| (nwr_8byte_cnt[7:3] == current_user_size[7:3] && current_user_size[2:0] != 'h0)));reg
 					*/
-assign nw_o = nwr_done;
+
+assign nwr_done = (state == NWR_s) ? current_user_last : 1'b0;
+assign error_out = over_time;
+assign error_target_id = des_id;
+assign error_type_o = (state == DB_RESP_s && over_time) ? 2'h1 : 
+						((state == WAIT_TARGET_ACK_s && over_time) ? 2'h2 : 2'h0);
+						
+						
 
 always @(posedge log_clk) begin
 	if (state == NWR_s && current_user_first) begin
-		$display("Source->Target: Now sending NWR packet, and the length is %d", current_user_size+1);
-		$display("Source->Target: The target ID is %x", target_ed_addr);
+		$display($time);
+		$display("Source->Target: Now sending NWR packet with the length being %d and target ID being %x", current_user_size+1,target_ed_addr);
+		//$display("Source->Target: The target ID is %x", target_ed_addr);
+	end
+	
+	if (error_out && error_type_o == 2'h1) begin
+		$display($time);
+		$display("No response to doorbell request");
+	end
+	else if (error_out && error_type_o == 2'h2) begin
+		$display($time);
+		$display("No response to data integration doorbell response.");
 	end
 end
 
@@ -397,7 +450,7 @@ always @(posedge log_clk ) begin
 		bit_reverse <= 'h0;
 	end
 	else begin
-		if (nwr_done) begin
+		if (target_ack) begin
 			bit_reverse <= ~bit_reverse;
 		end
 		else begin
@@ -438,29 +491,28 @@ assign current_resp_addr  = iresp_tdata_in[33:0];
 assign current_resp_db_info = iresp_tdata_in[31:16];
 assign current_resp_srcid = iresp_tuser_in[31:16];
 
-assign get_a_response =  (current_resp_ftype == DOORB && current_resp_srcid == 8'hf0 && iresp_tdata_in) ? 1'b1: 1'b0;
+assign get_a_response =  (current_resp_ftype == DOORB && current_resp_srcid == 8'hf0 && iresp_tvalid_in) ? 1'b1: 1'b0;
 // Indicate the requested endpoint is ready
 assign target_ready = (get_a_response && current_resp_db_info == 16'h0100) ? 1'b1: 1'b0;
 assign target_busy =  (get_a_response && current_resp_db_info == 16'h01ff) ? 1'b1 : 1'b0;
+assign target_confirm = (get_a_response && current_resp_db_info == target_ed_addr) ? 1'b1 : 1'b0;
+assign target_ack = over_time || target_confirm;
+// Indicate a NWRITE and data integration is done successfully
+assign nwr_ack_done_o = target_confirm;
 
 always @(posedge get_a_response) begin
 	//if (get_a_response) begin
-	$display("Source->Target: Get a response from target and the src_id is %x.", current_resp_srcid);
-	$display("Source->Target: The inform in the response is %x.",current_resp_db_info);
-/*		if (target_ready) begin
-			$display("Source->Target: The target endpoint is ready.");
-		end
-		else if (target_busy) begin
-			$display("Source->Target: The target endpoint is busy.");
-		end
-	//end
-*/
+	$display($time);
+	$display("Source->Target: Get a response from target and the src_id is %x and the inform is %x.", current_resp_srcid,current_resp_db_info);
+	//$display("Source->Target: The inform in the response is %x.",current_resp_db_info);
 end
 
 always @(posedge target_ready) begin
+	$display($time);
 	$display("Source->Target: The target endpoint is ready.");
 end
 always @(posedge target_ready) begin
+	$display($time);
 	$display("Source->Target: The target endpoint is busy.");
 end	
 
@@ -500,24 +552,6 @@ assign current_user_first = fifo_dout[73];
 assign current_user_keep = fifo_dout[72:65];
 assign current_user_last = fifo_dout[64];
 assign current_user_data = fifo_dout[63:0];
-
-
-/*
-always @(posedge log_clk) begin
-	if (log_rst_q) begin
-		current_user_size <= 'h0;
-	end
-	else begin
-		if (user_data_first) begin
-			current_user_size <= user_tdata_r[11:0] ; // The maximum transter length is 256 bytes, equal to 64 Dwords
-		end
-		else begin
-			current_user_size <= current_user_size;
-		end
-	end
-end
-*/
-
 assign current_user_size = (user_data_first) ? user_tdata_r[7:0]  : current_user_size;
 
 //assign packect_transfer_times = current_user_size[11:8];

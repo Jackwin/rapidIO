@@ -1,12 +1,13 @@
 `timescale 1ns/1ns
 
 module db_resp
+#(parameter SIM = 1)
 (
 	input log_clk,
 	input log_rst,
 
-	input wire [15:0] src_id,
-	input wire [15:0] des_id,
+	input wire [7:0] src_id,
+	input wire [7:0] des_id,
 
 	input wire [1:0] ed_ready_in,
 
@@ -95,6 +96,16 @@ wire fifo_empty;
 wire [8:0] fifo_data_cnt;
 reg fifo_data_first;
 
+// Debug signals
+wire [0:0] tresp_tvalid_ila;
+wire [0:0] tresp_tready_ila;
+wire [0:0] tresp_tlast_ila;
+
+wire [0:0] treq_tvalid_ila;
+wire [0:0] treq_tready_ila;
+wire [0:0] treq_tlast_ila;
+
+
 assign treq_advance_condition = treq_tvalid_in;
 assign treq_tready_o = 1'b1;
 //tresp_advance_condition = tresp_tready_in && tresp_tvalid_in;
@@ -135,10 +146,11 @@ assign current_srcid = treq_tuser_in[31:16];
 assign current_nwr_addr = current_addr;
 assign current_nwr_size = treq_tdata_in[43:36];
 
-always @(posedge log_clk) begin
-	if (current_ftype == DOORB && treq_tvalid_in) begin
-		$display("Target-> Source: Get a request from source, whose src_id is %x", current_srcid);
-		$display("Target-> Source: The inform in the request is %x",current_db_info);
+always @(posedge treq_tvalid_in) begin
+	if (current_ftype == DOORB) begin
+		$display($time);
+		$display("Target-> Source: Get a request from source, whose src_id is %x and the inform is %x", current_srcid, current_db_info);
+		//$display("Target-> Source: The inform in the request is %x",current_db_info);
 	end
 end
 
@@ -166,7 +178,7 @@ always @(posedge log_clk ) begin : proc_req_FSM
 
 				if (treq_tvalid_in && current_ftype	== DOORB && current_db_info	==16'h0101) begin
 					state <= SELF_DB_s;
-					current_db_info_r <= current_db_info;
+					current_db_info_r <= 16'h0100;
 				end
 				else if (treq_tvalid_in && current_ftype == DOORB && 
 						(current_db_info==16'h0200 || current_db_info==16'h0201)) begin
@@ -178,6 +190,7 @@ always @(posedge log_clk ) begin : proc_req_FSM
 					current_nwr_addr_r <= current_nwr_addr;
 					current_nwr_size_r <= current_nwr_size;
 					$display("--------------------------------------------------");
+					$display($time);
 					$display("Target: Get NWR request from source");
 					$display("Target: The transfer length from source is %d bytes.", (current_nwr_size+1));
 				end
@@ -260,6 +273,33 @@ always @(posedge log_clk ) begin : proc_req_FSM
 
 	end
 end
+
+
+assign tresp_tvalid_ila[0] = tresp_tvalid_o;
+assign tresp_tready_ila[0] = tresp_tready_in;
+assign tresp_tlast_ila[0] = tresp_tlast_o;
+assign treq_tvalid_ila[0] = treq_tvalid_in;
+assign treq_tlast_ila[0] = treq_tlast_in;
+
+generate
+	if (SIM == 0) begin: ila_resp_gen
+		ila_resp ila_resp_i (
+		.clk(log_clk), // input wire clk
+		.probe0(tresp_tvalid_ila), // input wire [0:0]  probe0  
+		.probe1(tresp_tready_ila), // input wire [0:0]  probe1 
+		.probe2(tresp_tlast_ila), // input wire [0:0]  probe2 
+		.probe3(tresp_tdata_o), // input wire [63:0]  probe3 
+		.probe4(tresp_tkeep_o), // input wire [7:0]  probe4 
+		.probe5(tresp_tuser_o), // input wire [31:0]  probe5 
+		.probe6(state), // input wire [1:0]  probe6
+		.probe7(treq_tlast_ila),
+		.probe8(treq_tvalid_ila),
+		.probe9(treq_tdata_in),
+		.probe10(treq_tkeep_in)
+	);
+	end
+endgenerate
+	
 /*
 reg [63:0] nwr_tdata;
 reg [7:0] nwr_tkeep;

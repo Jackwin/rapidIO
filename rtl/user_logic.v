@@ -22,7 +22,7 @@ module user_logic (
 
 	);
 
-localparam DATA_SIZE0 = 255;
+localparam DATA_SIZE0 = 247;
 localparam DATA_SIZE1 = 256;
 localparam DATA_SIZE2 = 257;
 localparam DATA_SIZE3 = 258;
@@ -53,7 +53,7 @@ assign user_tlast_o = ((qword_cnt == (user_tsize[11:3] ) && user_tsize[2:0] == 2
 						(qword_cnt == (user_tsize[11:3] + 1) && user_tsize[2:0] != 2'd0));
 assign user_tdata_o = gen_data;
 
-always @(user_tlast_o) begin
+always @(*) begin
 	if (user_tlast_o) begin
 		case(user_tsize[2:0]) 
 			// Data placement is from left to high, like little-endian.

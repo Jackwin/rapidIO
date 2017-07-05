@@ -17,7 +17,7 @@ wire mode_1x;
 wire port_initialized;
 wire link_initialized;
 wire clk_lock;
-
+parameter MIRROR = 1;
 initial begin
 	sys_clkp <= 1'b0;
 	forever
@@ -36,13 +36,14 @@ end
 
   srio_example_top_srio_gen2_0
  //// NOTE: uncomment these lines to simulate packet transfer
- // #(
+  //#(
+		
  //    .SIM_ONLY                (SIM_ONLY            ),//(0), // mirror object handles reporting
  //    .VALIDATION_FEATURES     (VALIDATION_FEATURES ),//(1),
  //    .QUICK_STARTUP           (QUICK_STARTUP       ),//(1),
  //    .USE_CHIPSCOPE           (USE_CHIPSCOPE       ),//(0),
  //    .STATISTICS_GATHERING    (STATISTICS_GATHERING) //(1)
- //   )
+ //  )
    srio_example_top_primary
      (.sys_clkp                (sys_clkp),
       .sys_clkn                (sys_clkn),
@@ -62,13 +63,14 @@ end
 	 
 	  srio_example_top_srio_gen2_0
  //// NOTE: uncomment these lines to simulate packet transfer
- // #(
+  #(
+		.MIRROR (MIRROR)
  //    .SIM_ONLY                (SIM_ONLY            ),//(0), // mirror object handles reporting
  //    .VALIDATION_FEATURES     (VALIDATION_FEATURES ),//(1),
  //    .QUICK_STARTUP           (QUICK_STARTUP       ),//(1),
  //    .USE_CHIPSCOPE           (USE_CHIPSCOPE       ),//(0),
  //    .STATISTICS_GATHERING    (STATISTICS_GATHERING) //(1)
- //   )
+    )
    srio_example_top_mirror
      (.sys_clkp                (sys_clkp),
       .sys_clkn                (sys_clkn),

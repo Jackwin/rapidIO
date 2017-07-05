@@ -48,8 +48,10 @@
 `timescale 1ps/1ps
 (* DowngradeIPIdentifiedWarnings = "yes" *)
 
-//`define SIM
+`define SIM
 module srio_example_top_srio_gen2_0 #(
+	parameter MIRROR = 0,
+	parameter SIM_1 = 1,
     parameter SIM_VERBOSE               = 0, // If set, generates unsynthesizable reporting
     parameter VALIDATION_FEATURES       = 0, // If set, uses internal instruction sequences for hw and sim test
     parameter QUICK_STARTUP             = 0, // If set, quick-launch configuration access is contained here
@@ -606,7 +608,7 @@ wire                      gt_rxdfelpmreset_in  ;
 	
 	`endif
 	
-	generate if (!VALIDATION_FEATURES) begin: db_req_gen
+	generate if (!VALIDATION_FEATURES && !MIRROR) begin: db_req_gen
 	
 	db_req db_req_i
 		(
@@ -623,7 +625,7 @@ wire                      gt_rxdfelpmreset_in  ;
 		
 		.nwr_ready_o(nwr_ready),
 		.nwr_busy_o(nwr_busy),
-		.nwr_done_o(nwr_done),
+		.nwr_ack_done_o(nwr_done),
 		
 		.user_tready_o(user_tready),
 		.user_addr(user_taddr),
@@ -666,14 +668,19 @@ wire                      gt_rxdfelpmreset_in  ;
 		.user_tlast_o(user_tlast)
 		
 	);
+	end
+	endgenerate
+	
+	generate if (!VALIDATION_FEATURES && MIRROR) begin: db_resp_gen
 	
 	// db_resp is used to simulate the bahavor of target, when synthesize, comment it.
-    db_resp db_resp_i
-  (
+    db_resp 
+	#(.SIM(SIM_1))
+	db_resp_i (
       .log_clk(log_clk),
       .log_rst(log_rst),
   
-      .src_id(8'hf0),
+      .src_id(8'h01),
       .des_id(8'h01),
   
       .ed_ready_in(ed_ready),
