@@ -48,10 +48,10 @@
 `timescale 1ps/1ps
 (* DowngradeIPIdentifiedWarnings = "yes" *)
 
-`define SIM
+//`define SIM
 module srio_example_top_srio_gen2_0 #(
 	parameter MIRROR = 0,
-	parameter SIM_1 = 1,
+	parameter SIM_1 = 0,
     parameter SIM_VERBOSE               = 0, // If set, generates unsynthesizable reporting
     parameter VALIDATION_FEATURES       = 0, // If set, uses internal instruction sequences for hw and sim test
     parameter QUICK_STARTUP             = 0, // If set, quick-launch configuration access is contained here
@@ -608,7 +608,8 @@ wire                      gt_rxdfelpmreset_in  ;
 	
 	`endif
 	
-	generate if (!VALIDATION_FEATURES && !MIRROR) begin: db_req_gen
+	//generate if (!VALIDATION_FEATURES && !MIRROR) begin: db_req_gen
+	generate if (!VALIDATION_FEATURES) begin: db_req_gen
 	
 	db_req db_req_i
 		(
@@ -671,8 +672,8 @@ wire                      gt_rxdfelpmreset_in  ;
 	end
 	endgenerate
 	
-	generate if (!VALIDATION_FEATURES && MIRROR) begin: db_resp_gen
-	
+	generate if (!VALIDATION_FEATURES) begin: db_resp_gen
+	//generate if (!VALIDATION_FEATURES && MIRROR) begin: db_resp_gen
 	// db_resp is used to simulate the bahavor of target, when synthesize, comment it.
     db_resp 
 	#(.SIM(SIM_1))
@@ -921,12 +922,12 @@ endgenerate
 
   // {{{ IREQ Interface ---------------------------
   // Select between internally-driven sequences or user sequences
-  assign ireq_tvalid = (VALIDATION_FEATURES) ? val_ireq_tvalid : axis_ireq_tvalid;
+/*  assign ireq_tvalid = (VALIDATION_FEATURES) ? val_ireq_tvalid : axis_ireq_tvalid;
   assign ireq_tlast  = (VALIDATION_FEATURES) ? val_ireq_tlast  : axis_ireq_tlast;
   assign ireq_tdata  = (VALIDATION_FEATURES) ? val_ireq_tdata  : axis_ireq_tdata;
   assign ireq_tkeep  = (VALIDATION_FEATURES) ? val_ireq_tkeep  : axis_ireq_tkeep;
   assign ireq_tuser  = (VALIDATION_FEATURES) ? val_ireq_tuser  : axis_ireq_tuser;
-
+*/
   assign axis_ireq_tready = (!VALIDATION_FEATURES) && ireq_tready;
   assign val_ireq_tready  = (VALIDATION_FEATURES)  && ireq_tready;
 	
@@ -1012,7 +1013,7 @@ endgenerate
   // {{{ IRESP Interface --------------------------
   // Select between internally-driven sequences or user sequences
 
-  assign iresp_tready = (VALIDATION_FEATURES) ? val_iresp_tready : axis_iresp_tready;
+  //assign iresp_tready = (VALIDATION_FEATURES) ? val_iresp_tready : axis_iresp_tready;
 
   assign val_iresp_tvalid  = (VALIDATION_FEATURES) && iresp_tvalid;
   assign val_iresp_tlast   = iresp_tlast;
