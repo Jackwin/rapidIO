@@ -48,20 +48,23 @@
 `timescale 1ps/1ps
 (* DowngradeIPIdentifiedWarnings = "yes" *)
 
-//`define SIM
+`define SIM
 module srio_example_top_srio_gen2_0 #(
-	parameter MIRROR = 0,
-	parameter SIM_1 = 0,
+	parameter MIRROR                    = 0,
+	`ifdef SIM
+	parameter SIM_1 					= 1,
+	`else
+	parameter SIM_1 					= 0,
+	`endif
     parameter SIM_VERBOSE               = 0, // If set, generates unsynthesizable reporting
     parameter VALIDATION_FEATURES       = 0, // If set, uses internal instruction sequences for hw and sim test
-    parameter QUICK_STARTUP             = 0, // If set, quick-launch configuration access is contained here
+    parameter QUICK_STARTUP             = 1, // If set, quick-launch configuration access is contained here
     parameter STATISTICS_GATHERING      = 0, // If set, I/O can be rerouted to the maint port [0,1]
     parameter C_LINK_WIDTH              = 1
     )
    //  port declarations ----------------
    (
     // Clocks and Resets
-	
     input            sys_clkp,              // MMCM reference clock
     input            sys_clkn,              // MMCM reference clock
 
@@ -80,13 +83,12 @@ module srio_example_top_srio_gen2_0 #(
     output 			si53301_OEB,
     output 			si53301_CLKSEL,
 
-   // input           sim_train_en,           // Set this only when simulating to reduce the size of counters
-   `ifdef SIM
+    //input           sim_train_en,           // Set this only when simulating to reduce the size of counters
+       `ifdef SIM
 	output [3:0] led0
 	`else
     output  [1:0]   led0
 	`endif
-	
 
    );
    //  ----------------------------------
@@ -109,35 +111,19 @@ module srio_example_top_srio_gen2_0 #(
 //
 
     // signals into the DUT
+    wire            iotx_tvalid;
+    wire            iotx_tready;
+    wire            iotx_tlast;
+    wire   [63:0]   iotx_tdata;
+    wire   [7:0]    iotx_tkeep;
+    wire   [31:0]   iotx_tuser;
 
-
-    wire            ireq_tvalid;
-    wire            ireq_tready;
-    wire            ireq_tlast;
-    wire   [63:0]   ireq_tdata;
-    wire   [7:0]    ireq_tkeep;
-    wire   [31:0]   ireq_tuser;
-
-    wire            iresp_tvalid;
-    wire            iresp_tready;
-    wire            iresp_tlast;
-    wire    [63:0]  iresp_tdata;
-    wire    [7:0]   iresp_tkeep;
-    wire    [31:0]  iresp_tuser;
-
-    wire            treq_tvalid;
-    wire            treq_tready;
-    wire            treq_tlast;
-    wire    [63:0]  treq_tdata;
-    wire    [7:0]   treq_tkeep;
-    wire    [31:0]  treq_tuser;
-
-    wire            tresp_tvalid;
-    wire            tresp_tready;
-    wire            tresp_tlast;
-    wire   [63:0]   tresp_tdata;
-    wire   [7:0]    tresp_tkeep;
-    wire   [31:0]   tresp_tuser;
+    wire            iorx_tvalid;
+    wire            iorx_tready;
+    wire            iorx_tlast;
+    wire    [63:0]  iorx_tdata;
+    wire    [7:0]   iorx_tkeep;
+    wire    [31:0]  iorx_tuser;
 
     wire            maintr_rst = 1'b0;
 
@@ -160,33 +146,19 @@ module srio_example_top_srio_gen2_0 #(
     wire   [1:0]    maintr_rresp;
 
     // signals from Validation modules
-    wire            val_ireq_tvalid;
-    wire            val_ireq_tready;
-    wire            val_ireq_tlast;
-    wire   [63:0]   val_ireq_tdata;
-    wire   [7:0]    val_ireq_tkeep;
-    wire   [31:0]   val_ireq_tuser;
+    wire            val_iotx_tvalid;
+    wire            val_iotx_tready;
+    wire            val_iotx_tlast;
+    wire   [63:0]   val_iotx_tdata;
+    wire   [7:0]    val_iotx_tkeep;
+    wire   [31:0]   val_iotx_tuser;
 
-    wire            val_iresp_tvalid;
-    wire            val_iresp_tready;
-    wire            val_iresp_tlast;
-    wire    [63:0]  val_iresp_tdata;
-    wire    [7:0]   val_iresp_tkeep;
-    wire    [31:0]  val_iresp_tuser;
-
-    wire            val_treq_tvalid;
-    wire            val_treq_tready;
-    wire            val_treq_tlast;
-    wire    [63:0]  val_treq_tdata;
-    wire    [7:0]   val_treq_tkeep;
-    wire    [31:0]  val_treq_tuser;
-
-    wire            val_tresp_tvalid;
-    wire            val_tresp_tready;
-    wire            val_tresp_tlast;
-    wire   [63:0]   val_tresp_tdata;
-    wire   [7:0]    val_tresp_tkeep;
-    wire   [31:0]   val_tresp_tuser;
+    wire            val_iorx_tvalid;
+    wire            val_iorx_tready;
+    wire            val_iorx_tlast;
+    wire    [63:0]  val_iorx_tdata;
+    wire    [7:0]   val_iorx_tkeep;
+    wire    [31:0]  val_iorx_tuser;
 
     wire            val_maintr_awvalid;
     wire            val_maintr_awready;
@@ -280,35 +252,19 @@ wire                      gt_rxdfelpmreset_in  ;
 
 
     // convert to ports when not using the pattern generator
+    wire            axis_iotx_tvalid;
+    wire            axis_iotx_tready;
+    wire            axis_iotx_tlast;
+    wire   [63:0]   axis_iotx_tdata;
+    wire   [7:0]    axis_iotx_tkeep;
+    wire   [31:0]   axis_iotx_tuser;
 
-
-    wire            axis_ireq_tvalid;
-    wire            axis_ireq_tready;
-    wire            axis_ireq_tlast;
-    wire   [63:0]   axis_ireq_tdata;
-    wire   [7:0]    axis_ireq_tkeep;
-    wire   [31:0]   axis_ireq_tuser;
-
-    wire            axis_iresp_tvalid;
-    wire            axis_iresp_tready;
-    wire            axis_iresp_tlast;
-    wire    [63:0]  axis_iresp_tdata;
-    wire    [7:0]   axis_iresp_tkeep;
-    wire    [31:0]  axis_iresp_tuser;
-
-    wire            axis_treq_tvalid;
-    wire            axis_treq_tready = 1'b1;
-    wire            axis_treq_tlast;
-    wire    [63:0]  axis_treq_tdata;
-    wire    [7:0]   axis_treq_tkeep;
-    wire    [31:0]  axis_treq_tuser;
-
-    wire            axis_tresp_tvalid = 1'b0;
-    wire            axis_tresp_tready;
-    wire            axis_tresp_tlast = 1'b0;
-    wire   [63:0]   axis_tresp_tdata = 'h0;
-    wire   [7:0]    axis_tresp_tkeep = 'h0;
-    wire   [31:0]   axis_tresp_tuser ='h0;
+    wire            axis_iorx_tvalid;
+    wire            axis_iorx_tready;
+    wire            axis_iorx_tlast;
+    wire    [63:0]  axis_iorx_tdata;
+    wire    [7:0]   axis_iorx_tkeep;
+    wire    [31:0]  axis_iorx_tuser;
 
     wire            axis_maintr_rst = 1'b0;
     wire            axis_maintr_awvalid = 1'b0;
@@ -330,8 +286,8 @@ wire                      gt_rxdfelpmreset_in  ;
     wire   [31:0]   axis_maintr_rdata;
     wire   [1:0]    axis_maintr_rresp;
 
-    wire            ireq_autocheck_error;
-    wire            ireq_request_done;
+    wire            iotx_autocheck_error;
+    wire            iotx_request_done;
     wire            maint_autocheck_error;
     wire            maint_done;
 
@@ -391,8 +347,8 @@ wire                      gt_rxdfelpmreset_in  ;
     (* mark_debug = "true" *)
     wire            continuous_go;
     reg             continuous_go_q;
-    reg             ireq_autocheck_error_q;
-    reg             ireq_request_done_q;
+    reg             iotx_autocheck_error_q;
+    reg             iotx_request_done_q;
     reg             reset_request_gen;
     (* mark_debug = "true" *)
     reg             continuous_in_process;
@@ -402,12 +358,11 @@ wire                      gt_rxdfelpmreset_in  ;
     reg   [15:0]    reset_continuous_srl;
     wire  [31:0]    stats_data;
   // }}} End wire declarations ------------
-
- //Added by Chunjie
+//Added by Chunjie
   wire sys_rst;
   
-   wire [7:0] src_id = 8'h01;
-  wire [7:0] des_id = 8'hf0;
+   wire [15:0] src_id = 16'h01;
+  wire [15:0] des_id = 16'hf0;
 
   wire rapidIO_ready;
   wire nwr_ready;
@@ -429,37 +384,10 @@ wire                      gt_rxdfelpmreset_in  ;
   reg [12:0] initialized_cnt;
   reg  initialized_delay_r;
   wire initialized_delay;
- /* wire ireq_tvalid;
-  wire ireq_tready;
-  wire ireq_tlast;
-  wire [63:0] ireq_tdata;
-  wire [7:0] ireq_tkeep;
-  wire [31:0] ireq_tuser;
-  
-  wire iresp_tvalid;
-  wire iresp_tready;
-  wire iresp_tlast;
-  wire [63:0] iresp_tdata;
-  wire [7:0] iresp_tkeep;
-  wire [31:0] iresp_tuser;
-  */
-  // signals for target endpoint
+
 
   wire [1:0] ed_ready = 2'd1;
- /* wire treq_tvalid;
-  wire treq_tready;
-  wire treq_tlast;
-  wire [63:0] treq_tdata;
-  wire [7:0] treq_tkeep;
-  wire [31:0] treq_tuser;
-
-  wire tresp_tready;
-  wire tresp_tvalid;
-  wire tresp_tlast;
-  wire [63:0] tresp_tdata;
-  wire [7:0] tresp_tkeep;
-  wire [31:0] tresp_tuser;
-  */
+ 
   // enable pulse 
   reg db_self_check_en, db_self_check_r;
   wire [0:0] db_self_check;
@@ -478,8 +406,8 @@ wire                      gt_rxdfelpmreset_in  ;
   wire [0:0] nwr_done_ila;
   wire [0:0] link_initialized_ila;
   wire [0:0] user_tready_ila;
-  wire [0:0] ireq_tvalid_ila;
-  wire [0:0] ireq_tlast_ila;
+  wire [0:0] iotx_tvalid_ila;
+  wire [0:0] iotx_tlast_ila;
   
   wire sim_train_en = 1'b0;
   assign sys_rst = ~sys_rst_n;
@@ -492,15 +420,17 @@ wire                      gt_rxdfelpmreset_in  ;
 	assign led0[0] = !mode_1x;
     assign led0[1] = ~link_initialized;
 	`endif
+
   // {{{ Drive LEDs to Development Board -------
-   // assign led0[0] = 1'b1;
-   // assign led0[1] = 1'b1;
-   // assign led0[0] = !mode_1x;
-   // assign led0[1] = port_initialized;
-   // assign led0[1] = ~link_initialized;
-   // assign led0[3] = clk_lock;
-  //  assign led0[6] = sim_train_en ? autocheck_error : 1'b0;
-  //  assign led0[7] = sim_train_en ? exercise_done : 1'b0;
+/*    assign led0[0] = 1'b1;
+    assign led0[1] = 1'b1;
+    assign led0[2] = !mode_1x;
+    assign led0[3] = port_initialized;
+    assign led0[4] = link_initialized;
+    assign led0[5] = clk_lock;
+    assign led0[6] = sim_train_en ? autocheck_error : 1'b0;
+    assign led0[7] = sim_train_en ? exercise_done : 1'b0;
+	*/
   // }}} End LEDs to Development Board ---------
 
     // assign send_pna               = phy_debug[0];
@@ -514,6 +444,9 @@ wire                      gt_rxdfelpmreset_in  ;
     assign core_received_pna = phy_debug[161];
     assign core_sent_pr      = phy_debug[162];
     assign core_received_pr  = phy_debug[163];
+
+
+
 
       assign continuous_go        = 1'b0;
       assign peek_poke_go         = 1'b0;
@@ -529,7 +462,7 @@ wire                      gt_rxdfelpmreset_in  ;
       assign register_reset       = 1'b0;
       assign reset_all_registers  = 1'b0;
       assign stats_address        = 4'b0;
-	  
+
    	// control Si53301
    assign si53301_OEA = 1'bz;
    assign si53301_OEB = 1'bz;
@@ -545,8 +478,8 @@ wire                      gt_rxdfelpmreset_in  ;
   assign nwr_done_ila[0] = nwr_done;
   assign link_initialized_ila[0] = link_initialized;
   assign user_tready_ila[0] = user_tready;
-  assign ireq_tvalid_ila[0] = ireq_tvalid;
-  assign ireq_tlast_ila[0] = ireq_tlast;
+  assign iotx_tvalid_ila[0] = iotx_tvalid;
+  assign iotx_tlast_ila[0] = iotx_tlast;
    
    // Generate doorbell self-check enable and nwr request enable by VIO
    `ifndef SIM
@@ -580,7 +513,7 @@ wire                      gt_rxdfelpmreset_in  ;
 		end
 	end
 	
-	assign initialized_delay = initialized_cnt[12];
+	assign initialized_delay = initialized_cnt[5];
 	
 	// Generate doorbell self-check enable pulse
 	always @(posedge log_clk) begin
@@ -608,10 +541,12 @@ wire                      gt_rxdfelpmreset_in  ;
 	
 	`endif
 	
-	//generate if (!VALIDATION_FEATURES && !MIRROR) begin: db_req_gen
-	generate if (!VALIDATION_FEATURES) begin: db_req_gen
+	generate if (!VALIDATION_FEATURES && !MIRROR) begin: db_req_gen
 	
-	db_req db_req_i
+	db_req 
+	#(.SIM(SIM_1))
+	db_req_i
+	
 		(
 		.log_clk(log_clk),
 		.log_rst(log_rst),
@@ -637,19 +572,19 @@ wire                      gt_rxdfelpmreset_in  ;
 		.user_tkeep_in(user_tkeep),
 		.user_tlast_in(user_tlast),
 		
-		.ireq_tvalid_o(ireq_tvalid),
-		.ireq_tready_in(ireq_tready),
-		.ireq_tlast_o(ireq_tlast),
-		.ireq_tdata_o(ireq_tdata),
-		.ireq_tkeep_o(ireq_tkeep),
-		.ireq_tuser_o(ireq_tuser),
+		.ireq_tvalid_o(iotx_tvalid),
+		.ireq_tready_in(iotx_tready),
+		.ireq_tlast_o(iotx_tlast),
+		.ireq_tdata_o(iotx_tdata),
+		.ireq_tkeep_o(iotx_tkeep),
+		.ireq_tuser_o(iotx_tuser),
 		
-		.iresp_tvalid_in(iresp_tvalid),
-		.iresp_tready_o(iresp_tready),
-		.iresp_tlast_in(iresp_tlast),
-		.iresp_tdata_in(iresp_tdata),
-		.iresp_tkeep_in(iresp_tkeep),
-		.iresp_tuser_in(iresp_tuser)
+		.iresp_tvalid_in(iorx_tvalid),
+		.iresp_tready_o(iorx_tready),
+		.iresp_tlast_in(iorx_tlast),
+		.iresp_tdata_in(iorx_tdata),
+		.iresp_tkeep_in(iorx_tkeep),
+		.iresp_tuser_in(iorx_tuser)
 		);
 	user_logic user_logic_i
 	(
@@ -672,8 +607,8 @@ wire                      gt_rxdfelpmreset_in  ;
 	end
 	endgenerate
 	
-	generate if (!VALIDATION_FEATURES) begin: db_resp_gen
-	//generate if (!VALIDATION_FEATURES && MIRROR) begin: db_resp_gen
+	//generate if (!VALIDATION_FEATURES) begin: db_resp_gen
+	generate if (!VALIDATION_FEATURES && MIRROR) begin: db_resp_gen
 	// db_resp is used to simulate the bahavor of target, when synthesize, comment it.
     db_resp 
 	#(.SIM(SIM_1))
@@ -681,27 +616,31 @@ wire                      gt_rxdfelpmreset_in  ;
       .log_clk(log_clk),
       .log_rst(log_rst),
   
-      .src_id(8'h01),
-      .des_id(8'h01),
+      .src_id(16'hf0),
+      .des_id(16'h01),
   
       .ed_ready_in(ed_ready),
   
-      .treq_tvalid_in(treq_tvalid),
-      .treq_tready_o(treq_tready),
-      .treq_tlast_in(treq_tlast),
-      .treq_tdata_in(treq_tdata),
-      .treq_tkeep_in(treq_tkeep),
-      .treq_tuser_in(treq_tuser),
+      .treq_tvalid_in(iorx_tvalid),
+      .treq_tready_o(iorx_tready),
+      .treq_tlast_in(iorx_tlast),
+      .treq_tdata_in(iorx_tdata),
+      .treq_tkeep_in(iorx_tkeep),
+      .treq_tuser_in(iorx_tuser),
   
       // response interface
-      .tresp_tready_in(tresp_tready),
-      .tresp_tvalid_o(tresp_tvalid),
-      .tresp_tlast_o(tresp_tlast),
-      .tresp_tdata_o(tresp_tdata),
-      .tresp_tkeep_o(tresp_tkeep),    
-      .tresp_tuser_o(tresp_tuser)
+      .tresp_tready_in(iotx_tready),
+      .tresp_tvalid_o(iotx_tvalid),
+      .tresp_tlast_o(iotx_tlast),
+      .tresp_tdata_o(iotx_tdata),
+      .tresp_tkeep_o(iotx_tkeep),    
+      .tresp_tuser_o(iotx_tuser)
       );
 	  
+
+	end
+endgenerate
+//end
 	`ifndef SIM
 	vio_0 vio_i (
 	.clk(log_clk),                // input wire clk
@@ -721,24 +660,21 @@ wire                      gt_rxdfelpmreset_in  ;
 		.probe2(nwr_done_ila), // input wire [0:0]  probe2 
 		.probe3(link_initialized_ila), // input wire [0:0]  probe3 
 		.probe4(user_tready_ila), // input wire [0:0]  probe4 
-		.probe5(ireq_tvalid_ila), // input wire [0:0]  probe5 
-		.probe6(ireq_tlast_ila), // input wire [0:0]  probe6 
-		.probe7(ireq_tuser), // input wire [31:0]  probe7 
-		.probe8(ireq_tdata), // input wire [63:0]  probe8 
-		.probe9(ireq_tkeep) // input wire [7:0]  probe9
+		.probe5(iotx_tvalid_ila), // input wire [0:0]  probe5 
+		.probe6(iotx_tlast_ila), // input wire [0:0]  probe6 
+		.probe7(iotx_tuser), // input wire [31:0]  probe7 
+		.probe8(iotx_tdata), // input wire [63:0]  probe8 
+		.probe9(iotx_tkeep) // input wire [7:0]  probe9
 	);
 	`endif
-	end
-endgenerate
-//end
 
   // feed back the last captured data to VIO
   always @(posedge log_clk) begin
     if (log_rst) begin
       captured_data <= 64'h0;
     // IO interface
-    end else if (iresp_tvalid && iresp_tready) begin
-      captured_data <= axis_iresp_tdata;
+    end else if (iorx_tvalid && iorx_tready) begin
+      captured_data <= axis_iorx_tdata;
     // maintenance interface
     end else if (maintr_rvalid && maintr_rready) begin
       captured_data <= axis_maintr_rdata;
@@ -748,8 +684,8 @@ endgenerate
   // Continuous data flow
   always @(posedge log_clk) begin
     continuous_go_q        <= continuous_go;
-    ireq_request_done_q    <= ireq_request_done;
-    ireq_autocheck_error_q <= ireq_autocheck_error;
+    iotx_request_done_q    <= iotx_request_done;
+    iotx_autocheck_error_q <= iotx_autocheck_error;
     reset_request_gen      <= sim_train_en ? log_rst : |reset_continuous_srl && continuous_in_process;
   end
 
@@ -769,9 +705,9 @@ endgenerate
     end else if (continuous_go && !continuous_go_q) begin
       reset_continuous_set <= 1'b1;
       stop_continuous_test <= 1'b0;
-    end else if (!ireq_autocheck_error_q && ireq_autocheck_error && continuous_in_process) begin
+    end else if (!iotx_autocheck_error_q && iotx_autocheck_error && continuous_in_process) begin
       stop_continuous_test <= 1'b1;
-    end else if (!stop_continuous_test && !ireq_request_done_q && ireq_request_done &&
+    end else if (!stop_continuous_test && !iotx_request_done_q && iotx_request_done &&
                   continuous_in_process) begin
       reset_continuous_set <= 1'b1;
     end else begin
@@ -827,33 +763,19 @@ endgenerate
       .srio_txn0               (srio_txn0),
       .srio_txp0               (srio_txp0),
 
-      .s_axis_ireq_tvalid            (ireq_tvalid),
-      .s_axis_ireq_tready            (ireq_tready),
-      .s_axis_ireq_tlast             (ireq_tlast),
-      .s_axis_ireq_tdata             (ireq_tdata),
-      .s_axis_ireq_tkeep             (ireq_tkeep),
-      .s_axis_ireq_tuser             (ireq_tuser),
+      .s_axis_iotx_tvalid            (iotx_tvalid),
+      .s_axis_iotx_tready            (iotx_tready),
+      .s_axis_iotx_tlast             (iotx_tlast),
+      .s_axis_iotx_tdata             (iotx_tdata),
+      .s_axis_iotx_tkeep             (iotx_tkeep),
+      .s_axis_iotx_tuser             (iotx_tuser),
 
-      .m_axis_iresp_tvalid           (iresp_tvalid),
-      .m_axis_iresp_tready           (iresp_tready),
-      .m_axis_iresp_tlast            (iresp_tlast),
-      .m_axis_iresp_tdata            (iresp_tdata),
-      .m_axis_iresp_tkeep            (iresp_tkeep),
-      .m_axis_iresp_tuser            (iresp_tuser),
-
-      .s_axis_tresp_tvalid           (tresp_tvalid),
-      .s_axis_tresp_tready           (tresp_tready),
-      .s_axis_tresp_tlast            (tresp_tlast),
-      .s_axis_tresp_tdata            (tresp_tdata),
-      .s_axis_tresp_tkeep            (tresp_tkeep),
-      .s_axis_tresp_tuser            (tresp_tuser),
-
-      .m_axis_treq_tvalid            (treq_tvalid),
-      .m_axis_treq_tready            (treq_tready),
-      .m_axis_treq_tlast             (treq_tlast),
-      .m_axis_treq_tdata             (treq_tdata),
-      .m_axis_treq_tkeep             (treq_tkeep),
-      .m_axis_treq_tuser             (treq_tuser),
+      .m_axis_iorx_tvalid            (iorx_tvalid),
+      .m_axis_iorx_tready            (iorx_tready),
+      .m_axis_iorx_tlast             (iorx_tlast),
+      .m_axis_iorx_tdata             (iorx_tdata),
+      .m_axis_iorx_tkeep             (iorx_tkeep),
+      .m_axis_iorx_tuser             (iorx_tuser),
 
       .s_axi_maintr_rst              (maintr_rst),
 
@@ -920,56 +842,67 @@ endgenerate
   // Initiator-driven side --------------------
 
 
-  // {{{ IREQ Interface ---------------------------
+
+
+
+
+  assign autocheck_error         = iotx_autocheck_error || maint_autocheck_error;
+  assign exercise_done           = iotx_request_done && maint_done;
+
+  // }}} End of Initiator-driven side -------------
+
+
+  // {{{ Target-driven side -----------------------
+
+
+
+
+
+
+  // }}} End of Target-driven side ----------------
+
+  // {{{ IO Packet Generator ----------------------
+
+  // {{{ IOTX Interface ---------------------------
   // Select between internally-driven sequences or user sequences
-/*  assign ireq_tvalid = (VALIDATION_FEATURES) ? val_ireq_tvalid : axis_ireq_tvalid;
-  assign ireq_tlast  = (VALIDATION_FEATURES) ? val_ireq_tlast  : axis_ireq_tlast;
-  assign ireq_tdata  = (VALIDATION_FEATURES) ? val_ireq_tdata  : axis_ireq_tdata;
-  assign ireq_tkeep  = (VALIDATION_FEATURES) ? val_ireq_tkeep  : axis_ireq_tkeep;
-  assign ireq_tuser  = (VALIDATION_FEATURES) ? val_ireq_tuser  : axis_ireq_tuser;
+  /*assign iotx_tvalid = (VALIDATION_FEATURES) ? val_iotx_tvalid : axis_iotx_tvalid;
+  assign iotx_tlast  = (VALIDATION_FEATURES) ? val_iotx_tlast  : axis_iotx_tlast;
+  assign iotx_tdata  = (VALIDATION_FEATURES) ? val_iotx_tdata  : axis_iotx_tdata;
+  assign iotx_tkeep  = (VALIDATION_FEATURES) ? val_iotx_tkeep  : axis_iotx_tkeep;
+  assign iotx_tuser  = (VALIDATION_FEATURES) ? val_iotx_tuser  : axis_iotx_tuser;
+  assign axis_iotx_tready = (!VALIDATION_FEATURES) && iotx_tready;
+  assign val_iotx_tready  = (VALIDATION_FEATURES)  && iotx_tready;
+
 */
-  assign axis_ireq_tready = (!VALIDATION_FEATURES) && ireq_tready;
-  assign val_ireq_tready  = (VALIDATION_FEATURES)  && ireq_tready;
-	
-
-
   // When enabled, report results.
   // This is a simulation-only option and cannot be synthesized
-  generate if (SIM_VERBOSE) begin: ireq_reporting_gen
+  generate if (SIM_VERBOSE) begin: iotx_reporting_gen
    srio_report
      #(.VERBOSITY        (2),
        .DIRECTION        (1),
-       .NAME             (0))  // Data is flowing into the core
-     srio_ireq_report_inst
+       .NAME                   (16))  // Data is flowing into the core
+     srio_iotx_report_inst
       (
       .log_clk                 (log_clk),
       .log_rst                 (log_rst),
 
-      .tvalid                  (ireq_tvalid),
-      .tready                  (ireq_tready),
-      .tlast                   (ireq_tlast),
-      .tdata                   (ireq_tdata),
-      .tkeep                   (ireq_tkeep),
-      .tuser                   (ireq_tuser)
+      .tvalid                  (iotx_tvalid),
+      .tready                  (iotx_tready),
+      .tlast                   (iotx_tlast),
+      .tdata                   (iotx_tdata),
+      .tkeep                   (iotx_tkeep),
+      .tuser                   (iotx_tuser)
      );
   end
   endgenerate
-  // }}} End of IREQ Interface --------------------
+  // }}} End of IOTX Interface --------------------
 
 
-  // {{{ Initiator Generator/Checker --------------
+  // {{{ IO Packet Generator/Checker --------------
 
   // If internally-driven sequences are required
-  generate if (VALIDATION_FEATURES) begin: ireq_validation_gen
-   srio_request_gen_srio_gen2_0
-     #(.SEND_SWRITE       (1),
-       .SEND_NWRITER      (1),
-       .SEND_NWRITE       (1),
-       .SEND_NREAD        (1),
-       .SEND_FTYPE9       (0),
-       .SEND_DB           (1),
-       .SEND_MSG          (1))
-     srio_request_gen_inst (
+  generate if (VALIDATION_FEATURES) begin: io_validation_gen
+   srio_condensed_gen_srio_gen2_0 srio_condensed_gen_inst (
       .log_clk                 (log_clk),
       .log_rst                 (reset_request_gen),
 
@@ -978,21 +911,19 @@ endgenerate
       .source_id               (source_id),
       .id_override             (id_override),
 
-      .val_ireq_tvalid         (val_ireq_tvalid),
-      .val_ireq_tready         (val_ireq_tready),
-      .val_ireq_tlast          (val_ireq_tlast),
-      .val_ireq_tdata          (val_ireq_tdata),
-      .val_ireq_tkeep          (val_ireq_tkeep),
-      .val_ireq_tuser          (val_ireq_tuser),
+      .val_iotx_tvalid         (val_iotx_tvalid),
+      .val_iotx_tready         (val_iotx_tready),
+      .val_iotx_tlast          (val_iotx_tlast),
+      .val_iotx_tdata          (val_iotx_tdata),
+      .val_iotx_tkeep          (val_iotx_tkeep),
+      .val_iotx_tuser          (val_iotx_tuser),
 
-      .val_iresp_tvalid        (val_iresp_tvalid),
-      .val_iresp_tready        (val_iresp_tready),
-      .val_iresp_tlast         (val_iresp_tlast),
-      .val_iresp_tdata         (val_iresp_tdata),
-      .val_iresp_tkeep         (val_iresp_tkeep),
-      .val_iresp_tuser         (val_iresp_tuser),
-
-      .link_initialized        (link_initialized),
+      .val_iorx_tvalid         (val_iorx_tvalid),
+      .val_iorx_tready         (val_iorx_tready),
+      .val_iorx_tlast          (val_iorx_tlast),
+      .val_iorx_tdata          (val_iorx_tdata),
+      .val_iorx_tkeep          (val_iorx_tkeep),
+      .val_iorx_tuser          (val_iorx_tuser),
 
       // use these ports to peek/poke IO transactions
       .go                      (go_req),
@@ -1002,181 +933,56 @@ endgenerate
       .user_size               (user_size),
       .user_data               (user_data),
 
-      .request_autocheck_error (ireq_autocheck_error),
-      .request_done            (ireq_request_done)
+      .link_initialized        (link_initialized),
+      .request_autocheck_error (iotx_autocheck_error),
+      .request_done            (iotx_request_done)
      );
   end
   endgenerate
-  // }}} End of Initiator Generator/Checker -------
+  // }}} End of IO Packet Generator/Checker -------
 
 
-  // {{{ IRESP Interface --------------------------
+  // {{{ IORX Interface ---------------------------
   // Select between internally-driven sequences or user sequences
 
-  //assign iresp_tready = (VALIDATION_FEATURES) ? val_iresp_tready : axis_iresp_tready;
+/*  assign iorx_tready = (VALIDATION_FEATURES) ? val_iorx_tready : axis_iorx_tready;
 
-  assign val_iresp_tvalid  = (VALIDATION_FEATURES) && iresp_tvalid;
-  assign val_iresp_tlast   = iresp_tlast;
-  assign val_iresp_tdata   = iresp_tdata;
-  assign val_iresp_tkeep   = iresp_tkeep;
-  assign val_iresp_tuser   = iresp_tuser;
+  assign val_iorx_tvalid  = (VALIDATION_FEATURES) && iorx_tvalid;
+  assign val_iorx_tlast   = iorx_tlast;
+  assign val_iorx_tdata   = iorx_tdata;
+  assign val_iorx_tkeep   = iorx_tkeep;
+  assign val_iorx_tuser   = iorx_tuser;
 
-  assign axis_iresp_tvalid = (!VALIDATION_FEATURES) && iresp_tvalid;
-  assign axis_iresp_tlast  = iresp_tlast;
-  assign axis_iresp_tdata  = iresp_tdata;
-  assign axis_iresp_tkeep  = iresp_tkeep;
-  assign axis_iresp_tuser  = iresp_tuser;
-
-
-  // When enabled, report results.
-  // This is a simulation-only option and cannot be synthesized
-  generate if (SIM_VERBOSE) begin: iresp_reporting_gen
-   srio_report
-     #(.VERBOSITY              (2),
-       .DIRECTION              (0),
-       .NAME                   (1))  // Data is flowing out of the core
-     srio_iresp_report_inst
-      (
-      .log_clk                 (log_clk),
-      .log_rst                 (log_rst),
-
-      .tvalid                  (iresp_tvalid),
-      .tready                  (iresp_tready),
-      .tlast                   (iresp_tlast),
-      .tdata                   (iresp_tdata),
-      .tkeep                   (iresp_tkeep),
-      .tuser                   (iresp_tuser)
-     );
-  end
-  endgenerate
-  // }}} End of IRESP Interface -------------------
-
-
-
-
-
-  assign autocheck_error         = ireq_autocheck_error || maint_autocheck_error;
-  assign exercise_done           = ireq_request_done && maint_done;
-
-  // }}} End of Initiator-driven side -------------
-
-
-  // {{{ Target-driven side -----------------------
-
-  // {{{ TRESP Interface --------------------------
-  // Select between internally-driven sequences or user sequences
-/*  `ifndef SIM
-  assign tresp_tvalid = (VALIDATION_FEATURES) ? val_tresp_tvalid : axis_tresp_tvalid;
-  assign tresp_tlast  = (VALIDATION_FEATURES) ? val_tresp_tlast  : axis_tresp_tlast;
-  assign tresp_tdata  = (VALIDATION_FEATURES) ? val_tresp_tdata  : axis_tresp_tdata;
-  assign tresp_tkeep  = (VALIDATION_FEATURES) ? val_tresp_tkeep  : axis_tresp_tkeep;
-  assign tresp_tuser  = (VALIDATION_FEATURES) ? val_tresp_tuser  : axis_tresp_tuser;
-`endif*/
-  assign axis_tresp_tready = (!VALIDATION_FEATURES) && tresp_tready;
-  assign val_tresp_tready  = (VALIDATION_FEATURES)  && tresp_tready;
-
-
-  // When enabled, report results.
-  // This is a simulation-only option and cannot be synthesized
-  generate if (SIM_VERBOSE) begin: tresp_reporting_gen
-   srio_report
-     #(.VERBOSITY              (2),
-       .DIRECTION              (1),
-       .NAME                   (8))  // Data is flowing into the core
-     srio_tresp_report_inst
-      (
-      .log_clk                 (log_clk),
-      .log_rst                 (log_rst),
-
-      .tvalid                  (tresp_tvalid),
-      .tready                  (tresp_tready),
-      .tlast                   (tresp_tlast),
-      .tdata                   (tresp_tdata),
-      .tkeep                   (tresp_tkeep),
-      .tuser                   (tresp_tuser)
-     );
-  end
-  endgenerate
-  // }}} End of TRESP Interface -------------------
-
-
-  // {{{ Target Generator/Checker -----------------
-
-  // If internally-driven sequences are required
-  generate if (VALIDATION_FEATURES) begin: tresp_validation_gen
-   srio_response_gen_srio_gen2_0 srio_response_gen_inst (
-      .log_clk                 (log_clk),
-      .log_rst                 (log_rst),
-
-      .deviceid                (deviceid),
-      .source_id               (source_id),
-      .id_override             (id_override),
-
-      .val_tresp_tvalid        (val_tresp_tvalid),
-      .val_tresp_tready        (val_tresp_tready),
-      .val_tresp_tlast         (val_tresp_tlast),
-      .val_tresp_tdata         (val_tresp_tdata),
-      .val_tresp_tkeep         (val_tresp_tkeep),
-      .val_tresp_tuser         (val_tresp_tuser),
-
-      .val_treq_tvalid         (val_treq_tvalid),
-      .val_treq_tready         (val_treq_tready),
-      .val_treq_tlast          (val_treq_tlast),
-      .val_treq_tdata          (val_treq_tdata),
-      .val_treq_tkeep          (val_treq_tkeep),
-      .val_treq_tuser          (val_treq_tuser)
-     );
-  end
-  endgenerate
-  // }}} End of Target Generator/Checker ----------
-
-
-  // {{{ TREQ Interface ---------------------------
-  // Select between internally-driven sequences or user sequences
-  /*
-`ifndef SIM
-  assign treq_tready = (VALIDATION_FEATURES) ? val_treq_tready : axis_treq_tready;
-`endif
+  assign axis_iorx_tvalid = (!VALIDATION_FEATURES) && iorx_tvalid;
+  assign axis_iorx_tlast  = iorx_tlast;
+  assign axis_iorx_tdata  = iorx_tdata;
+  assign axis_iorx_tkeep  = iorx_tkeep;
+  assign axis_iorx_tuser  = iorx_tuser;
 */
-  assign val_treq_tvalid  = (VALIDATION_FEATURES) && treq_tvalid;
-  assign val_treq_tlast   = treq_tlast;
-  assign val_treq_tdata   = treq_tdata;
-  assign val_treq_tkeep   = treq_tkeep;
-  assign val_treq_tuser   = treq_tuser;
-
-  assign axis_treq_tvalid = (!VALIDATION_FEATURES) && treq_tvalid;
-  assign axis_treq_tlast  = treq_tlast;
-  assign axis_treq_tdata  = treq_tdata;
-  assign axis_treq_tkeep  = treq_tkeep;
-  assign axis_treq_tuser  = treq_tuser;
-
-
   // When enabled, report results.
   // This is a simulation-only option and cannot be synthesized
-  generate if (SIM_VERBOSE) begin: treq_reporting_gen
+  generate if (SIM_VERBOSE) begin: iorx_reporting_gen
    srio_report
      #(.VERBOSITY              (2),
        .DIRECTION              (0),
-       .NAME                   (9))  // Data is flowing out of the core
-     srio_treq_report_inst
+       .NAME                   (17))  // Data is flowing out of the core
+     srio_iorx_report_inst
       (
       .log_clk                 (log_clk),
       .log_rst                 (log_rst),
 
-      .tvalid                  (treq_tvalid),
-      .tready                  (treq_tready),
-      .tlast                   (treq_tlast),
-      .tdata                   (treq_tdata),
-      .tkeep                   (treq_tkeep),
-      .tuser                   (treq_tuser)
+      .tvalid                  (iorx_tvalid),
+      .tready                  (iorx_tready),
+      .tlast                   (iorx_tlast),
+      .tdata                   (iorx_tdata),
+      .tkeep                   (iorx_tkeep),
+      .tuser                   (iorx_tuser)
      );
   end
   endgenerate
-  // }}} End of TREQ Interface --------------------
+  // }}} End of IORX Interface --------------------
 
-
-
-  // }}} End of Target-driven side ----------------
+  // }}} End of IO Packet Generator ---------------
 
   // {{{ Maintenance Interface --------------------
 
@@ -1277,28 +1083,28 @@ endgenerate
       .phy_rst                 (phy_rst),
 
       // outgoing port 1
-      .tvalid_o1                  (ireq_tvalid),
-      .tready_o1                  (ireq_tready),
-      .tlast_o1                   (ireq_tlast),
-      .tdata_o1                   (ireq_tdata),
+      .tvalid_o1                  (iotx_tvalid),
+      .tready_o1                  (iotx_tready),
+      .tlast_o1                   (iotx_tlast),
+      .tdata_o1                   (iotx_tdata),
 
       // outgoing port 2
-      .tvalid_o2                  (iresp_tvalid),
-      .tready_o2                  (iresp_tready),
-      .tlast_o2                   (iresp_tlast),
-      .tdata_o2                   (iresp_tdata),
+      .tvalid_o2                  (1'b0),
+      .tready_o2                  (1'b0),
+      .tlast_o2                   (1'b0),
+      .tdata_o2                   (64'h0),
 
       // incoming port 1
-      .tvalid_i1                  (treq_tvalid),
-      .tready_i1                  (treq_tready),
-      .tlast_i1                   (treq_tlast),
-      .tdata_i1                   (treq_tdata),
+      .tvalid_i1                  (iorx_tvalid),
+      .tready_i1                  (iorx_tready),
+      .tlast_i1                   (iorx_tlast),
+      .tdata_i1                   (iorx_tdata),
 
       // incoming port 2
-      .tvalid_i2                  (tresp_tvalid),
-      .tready_i2                  (tresp_tready),
-      .tlast_i2                   (tresp_tlast),
-      .tdata_i2                   (tresp_tdata),
+      .tvalid_i2                  (1'b0),
+      .tready_i2                  (1'b0),
+      .tlast_i2                   (1'b0),
+      .tdata_i2                   (64'h0),
 
       .link_initialized        (link_initialized),
       .phy_debug               (phy_debug),
@@ -1313,6 +1119,7 @@ endgenerate
      );
   end
   endgenerate
+  
 
   // }}} End of Statistics Gatherer ---------------
 

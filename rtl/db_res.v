@@ -6,8 +6,8 @@ module db_resp
 	input log_clk,
 	input log_rst,
 
-	input wire [7:0] src_id,
-	input wire [7:0] des_id,
+	input wire [15:0] src_id,
+	input wire [15:0] des_id,
 
 	input wire [1:0] ed_ready_in,
 
@@ -148,8 +148,7 @@ assign current_nwr_size = treq_tdata_in[43:36];
 
 always @(posedge treq_tvalid_in) begin
 	if (current_ftype == DOORB) begin
-		$display($time);
-		$display("Target-> Source: Get a request from source, whose src_id is %x and the inform is %x", current_srcid, current_db_info);
+		$display($time, "Target-> Source: Get a request from source, whose src_id is %x and the inform is %x", current_srcid, current_db_info);
 		//$display("Target-> Source: The inform in the request is %x",current_db_info);
 	end
 end
@@ -190,8 +189,7 @@ always @(posedge log_clk ) begin : proc_req_FSM
 					current_nwr_addr_r <= current_nwr_addr;
 					current_nwr_size_r <= current_nwr_size;
 					$display("--------------------------------------------------");
-					$display($time);
-					$display("Target: Get NWR request from source");
+					$display($time, "Target: Get NWR request from source");
 					$display("Target: The transfer length from source is %d bytes.", (current_nwr_size+1));
 				end
 				else begin
@@ -235,7 +233,7 @@ always @(posedge log_clk ) begin : proc_req_FSM
 				tresp_tuser_o <= {src_id, des_id};
 				state <= IDLE_s;
 				current_db_info_r <= 'h0;
-				$display("Target-> Source: Response to data integration doorbell request");
+				$display($time, "Target-> Source: Response to data integration doorbell request");
 			end
 			NWR_s: begin
 				if (treq_tvalid_in && treq_tkeep_in == 8'hff) begin
@@ -295,7 +293,8 @@ generate
 		.probe7(treq_tlast_ila),
 		.probe8(treq_tvalid_ila),
 		.probe9(treq_tdata_in),
-		.probe10(treq_tkeep_in)
+		.probe10(treq_tkeep_in),
+		.probe11(treq_tuser_in)
 	);
 	end
 endgenerate

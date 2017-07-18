@@ -56,7 +56,7 @@ end
       .srio_txn0               (srio_txn0),
       .srio_txp0               (srio_txp0),
 
- //     .sim_train_en            (1'b1),
+      //.sim_train_en            (1'b1),
       .led0                    (led0_primary)
 
      );
@@ -83,7 +83,7 @@ end
       .srio_txn0               (srio_rxn0),
       .srio_txp0               (srio_rxp0),
 
-  //    .sim_train_en            (1'b1),
+     // .sim_train_en            (1'b1),
       .led0                    (led0_mirror)
 
      );
