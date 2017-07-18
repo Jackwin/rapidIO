@@ -22,7 +22,7 @@ module user_logic (
 
 	);
 
-localparam DATA_SIZE0 = 247;
+localparam DATA_SIZE0 = 128;
 localparam DATA_SIZE1 = 256;
 localparam DATA_SIZE2 = 257;
 localparam DATA_SIZE3 = 258;

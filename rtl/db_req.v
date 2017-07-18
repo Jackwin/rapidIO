@@ -228,13 +228,13 @@ always @(posedge log_clk) begin
 		WAIT_TARGET_ACK_s: begin
 			if (target_ack) begin
 				state <= IDLE_s;
-				$display($time,"Source: Data integration confirm from target.");
-				$stop;
+				$display($time," Source: Data integration confirm from target.");
+				
 			end
 			else if (over_time) begin
 				state <= IDLE_s;
-				$display($time,"Source: No data integration confirm from target.");
-				$stop;
+				$display($time," Source: No data integration confirm from target.");
+				
 			end
 			else begin
 				state <= WAIT_TARGET_ACK_s;
@@ -294,7 +294,7 @@ always @(posedge log_clk) begin
 				ireq_tlast_o <= 1'b1;
 				ireq_tuser_o <= {src_id, des_id};	
 
-				$display($time, "Source->Target: Self doorbell check");
+				$display($time, " Source->Target: Self doorbell check");
 			end
 				// Send data integration check
 /*			else begin
@@ -332,6 +332,7 @@ always @(posedge log_clk) begin
 				fifo_rd_en <= ~fifo_empty ;
 			end // else
 		*/
+		ireq_tuser_o <= {src_id, des_id};
 			ireq_tdata_o <= (current_user_valid && current_user_first && ireq_tready_in) ? {nwr_srcID, NWR, TNWR, 
 						1'b0, 2'h1, 1'b0, current_user_size[7:0] , 2'h0, target_ed_addr}
 						: ((current_user_valid && ~current_user_first && ireq_tready_in) ? current_user_data 
@@ -378,7 +379,7 @@ always @(posedge log_clk) begin
 			// Using ireq_last to indicate the packet boundary. When the number of transferred
 			// packects is packect_transfer_times, the ireq_last_o depends on the actual last user data
 			// flag, that is the eof bit from FIFO.
-			if (nwr_packect_transfer_cnt == packect_transfer_times) begin 
+			if (nwr_packect_transfer_cnt == packect_transfer_times && !ireq_tlast_o) begin 
 				ireq_tlast_o <= current_user_last;
 				
 			end
@@ -435,15 +436,15 @@ assign error_type_o = (state == DB_RESP_s && over_time) ? 2'h1 :
 always @(posedge log_clk) begin
 	if (state == NWR_s && current_user_first) begin
 	
-		$display($time, "Source->Target: Now sending NWR packet with the length being %d and target ID being %x", current_user_size+1,target_ed_addr);
+		$display($time, " Source->Target: Now sending NWR packet with the length being %d and target ID being %x", current_user_size+1,target_ed_addr);
 		//$display("Source->Target: The target ID is %x", target_ed_addr);
 	end
 	
 	if (error_out && error_type_o == 2'h1) begin
-		$display($time, "No response to doorbell request");
+		$display($time, " No response to doorbell request");
 	end
 	else if (error_out && error_type_o == 2'h2) begin
-		$display($time, "No response to data integration doorbell response.");
+		$display($time, " No response to data integration doorbell response.");
 	end
 end
 
@@ -461,6 +462,10 @@ always @(posedge log_clk ) begin
 			bit_reverse <= bit_reverse;
 		end 
 	end
+end
+
+always @(posedge target_ack) begin
+	#80000 $stop;
 end
 
 assign nwr_srcID = {7'h0, bit_reverse};
@@ -506,15 +511,15 @@ assign nwr_ack_done_o = target_confirm;
 
 always @(posedge get_a_response) begin
 	//if (get_a_response) begin
-	$display($time, "Source->Target: Get a response from target and the src_id is %x and the inform is %x.", current_resp_srcid,current_resp_db_info);
+	$display($time, " Source->Target: Get a response from target and the src_id is %x and the inform is %x.", current_resp_srcid,current_resp_db_info);
 	//$display("Source->Target: The inform in the response is %x.",current_resp_db_info);
 end
 
 always @(posedge target_ready) begin
-	$display($time, "Source->Target: The target endpoint is ready.");
+	$display($time, " Source->Target: The target endpoint is ready.");
 end
 always @(posedge target_ready) begin
-	$display($time, "Source->Target: The target endpoint is busy.");
+	$display($time, " Source->Target: The target endpoint is busy.");
 end	
 
 /*
