@@ -82,6 +82,7 @@ module srio_example_top_srio_gen2_0 #(
 	output 			si53301_OEA,
     output 			si53301_OEB,
     output 			si53301_CLKSEL,
+    output [3:0] fsp_disbale,   
 
     //input           sim_train_en,           // Set this only when simulating to reduce the size of counters
        `ifdef SIM
@@ -368,8 +369,14 @@ wire                      gt_rxdfelpmreset_in  ;
   wire nwr_ready;
   wire nwr_busy;
   wire nwr_done;
+  reg [2:0] nwr_done_r;
+  // Count the times of NWR operation
+  reg [3:0] nwr_cnt;
   reg nwr_req_p;
   reg nwr_ready_r0, nwr_ready_r1;
+  reg nwr_req_en, nwr_req_en_r;
+  wire [0:0] nwr_req;
+  
   
   wire user_ready;
   wire [33:0] user_taddr;
@@ -385,15 +392,12 @@ wire                      gt_rxdfelpmreset_in  ;
   reg  initialized_delay_r;
   wire initialized_delay;
 
-
   wire [1:0] ed_ready = 2'd1;
  
   // enable pulse 
   reg db_self_check_en, db_self_check_r;
   wire [0:0] db_self_check;
-  reg nwr_req_en, nwr_req_en_r;
-  wire [0:0] nwr_req;
-  
+
   // Debug signals
   wire [0:0] mode_1x_vio;
   wire [0:0] port_initialized_vio;
@@ -467,6 +471,7 @@ wire                      gt_rxdfelpmreset_in  ;
    assign si53301_OEA = 1'bz;
    assign si53301_OEB = 1'bz;
    assign si53301_CLKSEL = 1'b0;
+   assign fsp_disbale 3'b000;
    
   assign mode_1x_vio[0] = mode_1x;
   assign port_initialized_vio[0] = port_initialized;
@@ -519,23 +524,42 @@ wire                      gt_rxdfelpmreset_in  ;
 	always @(posedge log_clk) begin
 		if (log_rst) begin
 			initialized_delay_r <= 1'b0;
+			nwr_done_r <= 'h0;
 		end
 		else begin
 			initialized_delay_r <= initialized_delay;
-			db_self_check_en <= ~initialized_delay_r & initialized_delay;
+			nwr_done_r[2:0] <= {nwr_done_r[1:0], nwr_done};
+			db_self_check_en <= (~initialized_delay_r & initialized_delay) || nwr_done_r[2];
+								
 		end
 	end
+	
+	always @(posedge log_clk) begin
+		if (log_rst) begin
+			nwr_cnt <= 'h0;
+		end
+		else begin
+			if (nwr_cnt == 'd8) begin
+				$stop;
+			end
+			else if (nwr_done_r[2]) begin
+				nwr_cnt <= nwr_cnt + 'h1;
+			end
+		end
+	end
+			
 	
 	// Generate NWR enable pulse
 	always @(posedge log_clk) begin
 		if (log_rst) begin
 			nwr_ready_r0 <= 1'b0;
 			nwr_ready_r1 <= 1'b1;
+			nwr_req_en <= 1'b0;
 		end
 		else begin
 			nwr_ready_r0 <= nwr_ready;
 			nwr_ready_r1 <= nwr_ready_r0;
-			nwr_req_en <= ~nwr_ready_r1 & nwr_ready_r0;
+			nwr_req_en <= (~nwr_ready_r1 & nwr_ready_r0);
 		end
 	end
 	

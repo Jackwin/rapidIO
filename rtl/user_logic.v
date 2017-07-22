@@ -24,12 +24,12 @@ module user_logic (
 
 localparam DATA_SIZE0 = 128;
 localparam DATA_SIZE1 = 256;
-localparam DATA_SIZE2 = 257;
-localparam DATA_SIZE3 = 258;
-localparam DATA_SIZE4 = 259;
-localparam DATA_SIZE5 = 260;
+localparam DATA_SIZE2 = 64;
+localparam DATA_SIZE3 = 32;
+localparam DATA_SIZE4 = 16;
+localparam DATA_SIZE5 = 8;
 localparam DATA_SIZE6 = 512;
-localparam DATA_SIZE7 = 513;
+localparam DATA_SIZE7 = 264;
 
 localparam IDLE_s = 2'd0;
 localparam GEN_DATA_s = 2'd1;
@@ -50,7 +50,7 @@ reg data_first;
 
 assign user_tsize_o = user_tsize-1;
 assign user_tlast_o = ((qword_cnt == (user_tsize[11:3] ) && user_tsize[2:0] == 2'd0) ||
-						(qword_cnt == (user_tsize[11:3] + 1) && user_tsize[2:0] != 2'd0));
+						(qword_cnt == (user_tsize[11:3] +1 ) && user_tsize[2:0] != 2'd0));
 assign user_tdata_o = gen_data;
 
 always @(*) begin
@@ -86,13 +86,13 @@ always @(posedge log_clk or posedge	log_rst) begin
 		user_tvalid_o <= 1'b0;
 		case(state)
 			IDLE_s: begin
-				data_sel <= 2'h0;
 				gen_data <= 'h0;
 				qword_cnt <= 'h0;
 				byte_cnt <= 'h0;
 				if (nwr_ready_in && user_tready_in) begin
 					state <= GEN_DATA_s;
 					data_sel <= data_sel + 4'h1;
+					// The first gen_data is the gen_data length
 					gen_data <= {52'h0, user_tsize-1};
 					user_tvalid_o <= 1'b1;
 				end
@@ -134,10 +134,10 @@ always @(posedge log_clk or posedge	log_rst) begin
 				end // else
 			end
 			END_s: begin
-				data_sel <= 2'h0;
 				gen_data <= 'h0;
 				qword_cnt <= 'h0;
 				byte_cnt <= 'h0;
+				state <= IDLE_s;
 			end
 			default: begin
 				state <= IDLE_s;

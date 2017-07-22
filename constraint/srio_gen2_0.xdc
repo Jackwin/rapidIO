@@ -44,6 +44,20 @@ set_property IOSTANDARD LVCMOS15 [get_ports si53301_OEB]
 set_property PACKAGE_PIN C20 [get_ports si53301_CLKSEL]
 set_property IOSTANDARD LVCMOS15 [get_ports si53301_CLKSEL]
 
+## FSP
+set_property PACKAGE_PIN AJ27 [get_ports fsp_disble[0]]
+set_property IOSTANDARD LVCMOS33 [get_ports fsp_disble[0]]
+
+et_property PACKAGE_PIN AJ28 [get_ports fsp_disble[1]]
+set_property IOSTANDARD LVCMOS33 [get_ports fsp_disble[1]]
+
+et_property PACKAGE_PIN AD29 [get_ports fsp_disble[2]]
+set_property IOSTANDARD LVCMOS33 [get_ports fsp_disble[2]]
+
+et_property PACKAGE_PIN W27 [get_ports fsp_disble[3]]
+set_property IOSTANDARD LVCMOS33 [get_ports fsp_disble[3]]
+
+
 # DP1 MGT0_118
 set_property PACKAGE_PIN D1 [get_ports srio_txn0]
 set_property PACKAGE_PIN E3 [get_ports srio_rxn0]
