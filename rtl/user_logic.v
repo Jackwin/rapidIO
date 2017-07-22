@@ -27,7 +27,7 @@ localparam DATA_SIZE1 = 256;
 localparam DATA_SIZE2 = 64;
 localparam DATA_SIZE3 = 32;
 localparam DATA_SIZE4 = 16;
-localparam DATA_SIZE5 = 8;
+localparam DATA_SIZE5 = 16;
 localparam DATA_SIZE6 = 512;
 localparam DATA_SIZE7 = 264;
 
@@ -73,6 +73,19 @@ always @(*) begin
 	end
 end
 
+always @(*) begin
+	case(data_sel)
+		3'd0: user_tsize <= DATA_SIZE0;
+		3'd1: user_tsize <= DATA_SIZE1;
+		3'd2: user_tsize <= DATA_SIZE2;
+		3'd3: user_tsize <= DATA_SIZE3;
+		3'd4: user_tsize <= DATA_SIZE4;
+		3'd5: user_tsize <= DATA_SIZE5;
+		3'd6: user_tsize <= DATA_SIZE6;
+		3'd7: user_tsize <= DATA_SIZE7;
+	endcase // data_sel
+end
+
 always @(posedge log_clk or posedge	log_rst) begin
 	if (log_rst) begin
 		state <= IDLE_s;
@@ -80,7 +93,6 @@ always @(posedge log_clk or posedge	log_rst) begin
 		gen_data <= 'h0;
 		qword_cnt <= 'h0;
 		byte_cnt <= 'h0;
-		user_tsize <= 12'hfff;
 	end
 	else begin
 		user_tvalid_o <= 1'b0;
@@ -91,25 +103,14 @@ always @(posedge log_clk or posedge	log_rst) begin
 				byte_cnt <= 'h0;
 				if (nwr_ready_in && user_tready_in) begin
 					state <= GEN_DATA_s;
-					data_sel <= data_sel + 4'h1;
-					// The first gen_data is the gen_data length
-					gen_data <= {52'h0, user_tsize-1};
+					
 					user_tvalid_o <= 1'b1;
 				end
 				else begin
 					state <= IDLE_s;
 				end
+				gen_data <= {52'h0, user_tsize-1};
 
-				case(data_sel)
-					3'd0: user_tsize <= DATA_SIZE0;
-					3'd1: user_tsize <= DATA_SIZE1;
-					3'd2: user_tsize <= DATA_SIZE2;
-					3'd3: user_tsize <= DATA_SIZE3;
-					3'd4: user_tsize <= DATA_SIZE4;
-					3'd5: user_tsize <= DATA_SIZE5;
-					3'd6: user_tsize <= DATA_SIZE6;
-					3'd7: user_tsize <= DATA_SIZE7;
-				endcase // data_sel
 			end
 			GEN_DATA_s: begin
 
@@ -138,6 +139,7 @@ always @(posedge log_clk or posedge	log_rst) begin
 				qword_cnt <= 'h0;
 				byte_cnt <= 'h0;
 				state <= IDLE_s;
+				data_sel <= data_sel + 4'h1;
 			end
 			default: begin
 				state <= IDLE_s;

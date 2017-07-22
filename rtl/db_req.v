@@ -226,7 +226,7 @@ always @(posedge log_clk) begin
 			end		
 		end
 		NWR_s: begin
-			if (nwr_done_r) begin
+			if (nwr_done) begin
 				state <= INTEG_DB_REQ_s	;
 			end
 			else begin
@@ -459,8 +459,13 @@ always @(*) begin
 			rapidIO_ready_o = 1'b0;
 			timer_ena = 1'b0;
 			ireq_tuser_o = {src_id, des_id};
-			ireq_tdata_o = (current_user_valid && current_user_first && ireq_tready_in) ? {nwr_srcID, NWR, TNWR, 
+			/*ireq_tdata_o = (current_user_valid && current_user_first && ireq_tready_in) ? {nwr_srcID, NWR, TNWR, 
 						1'b0, 2'h1, 1'b0, current_user_size[7:0] , 2'h0, target_ed_addr}
+						: ((current_user_valid && ~current_user_first && ireq_tready_in) ? current_user_data 
+						: ((!ireq_tready_in) ? ireq_tdata_o : 'h0)) ;
+						*/
+			ireq_tdata_o = (current_user_valid && current_user_first && ireq_tready_in) ? {nwr_srcID, NWR, TNWR, 
+						1'b0, 2'h1, 1'b0, current_user_data[7:0] , 2'h0, target_ed_addr}
 						: ((current_user_valid && ~current_user_first && ireq_tready_in) ? current_user_data 
 						: ((!ireq_tready_in) ? ireq_tdata_o : 'h0)) ;
 			ireq_tvalid_o = current_user_valid ;
@@ -734,7 +739,8 @@ assign current_user_first = fifo_dout[73];
 assign current_user_keep = fifo_dout[72:65];
 assign current_user_last =  fifo_dout[64];
 assign current_user_data = fifo_dout[63:0];
-assign current_user_size = (user_data_first) ? user_tdata_r[7:0]  : current_user_size;
+//assign current_user_size = (user_data_first) ? user_tdata_r[7:0]  : current_user_size;
+assign current_user_size = (current_user_first) ? current_user_data[7:0]  : current_user_size;
 
 //assign packect_transfer_times = current_user_size[11:8];
 assign byte_left = current_user_size[7:0];

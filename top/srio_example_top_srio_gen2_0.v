@@ -48,7 +48,7 @@
 `timescale 1ps/1ps
 (* DowngradeIPIdentifiedWarnings = "yes" *)
 
-`define SIM
+//`define SIM
 module srio_example_top_srio_gen2_0 #(
 	parameter MIRROR                    = 0,
 	`ifdef SIM
@@ -82,7 +82,7 @@ module srio_example_top_srio_gen2_0 #(
 	output 			si53301_OEA,
     output 			si53301_OEB,
     output 			si53301_CLKSEL,
-    output [3:0] fsp_disbale,   
+    output [3:0] fsp_disable,   
 
     //input           sim_train_en,           // Set this only when simulating to reduce the size of counters
        `ifdef SIM
@@ -471,7 +471,7 @@ wire                      gt_rxdfelpmreset_in  ;
    assign si53301_OEA = 1'bz;
    assign si53301_OEB = 1'bz;
    assign si53301_CLKSEL = 1'b0;
-   assign fsp_disbale 3'b000;
+   assign fsp_disable = 3'b000;
    
   assign mode_1x_vio[0] = mode_1x;
   assign port_initialized_vio[0] = port_initialized;
