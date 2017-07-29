@@ -146,7 +146,7 @@ assign current_srcid = treq_tuser_in[31:16];
 assign current_nwr_addr = current_addr;
 assign current_nwr_size = treq_tdata_in[43:36];
 
-always @(posedge treq_tvalid_in) begin
+always @(negedge treq_tvalid_in) begin
 	if (current_ftype == DOORB) begin
 		$display($time, "Target-> Source: Get a request from source, whose src_id is %x and the inform is %x", current_srcid, current_db_info);
 		//$display("Target-> Source: The inform in the request is %x",current_db_info);
@@ -172,7 +172,7 @@ always @(posedge log_clk ) begin : proc_req_FSM
 			IDLE_s: begin
 				nwr_recv_byte_cnt <= 'h0;
 				if(nwr_recv_byte_cnt != 'h0) begin
-					$display("Target: The received packet length is %d",nwr_recv_byte_cnt);
+					$display($time, " Target: The received packet length is %d",nwr_recv_byte_cnt);
 				end
 
 				if (treq_tvalid_in && current_ftype	== DOORB && current_db_info	==16'h0101) begin

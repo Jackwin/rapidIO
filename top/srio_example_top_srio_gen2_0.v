@@ -48,7 +48,7 @@
 `timescale 1ps/1ps
 (* DowngradeIPIdentifiedWarnings = "yes" *)
 
-//`define SIM
+`define SIM
 module srio_example_top_srio_gen2_0 #(
 	parameter MIRROR                    = 0,
 	`ifdef SIM
