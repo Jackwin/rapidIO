@@ -100,9 +100,10 @@ reg [2:0] nwr_times;
 reg db_req_ena;
 reg [15:0] db_req_inform;
 
+wire ireq_condition_on;
+
 // Update the source ID
 reg bit_reverse;
-
 reg dr_req_r1, dr_req_p;
 
 // Timer to wait the data received confirm from target
@@ -154,7 +155,7 @@ wire current_user_valid;
 wire current_user_first;
 wire [7:0] current_user_keep;
 wire current_user_last;
-wire [7:0] current_user_size = 7'h0;
+reg [7:0] current_user_size = 8'h0;
 
 reg [8:0] nwr_byte_cnt;
 reg [8:0] nwr_8byte_cnt;
@@ -175,6 +176,7 @@ always @(posedge log_clk or posedge log_rst) begin
           log_rst_shift <= {log_rst_shift[14:0], 1'b0};
 end
 assign log_rst_q = log_rst_shift[15];
+assign ireq_condition_on = ireq_tvalid_o && ireq_tready_in;
 
 
 always @(posedge log_clk) begin
@@ -201,7 +203,7 @@ always @(posedge log_clk) begin
             end
         end
         DB_REQ_s: begin
-            if (ireq_tready_in) begin
+            if (ireq_condition_on) begin
                 state <= DB_RESP_s;
             end
             else begin
@@ -239,7 +241,7 @@ always @(posedge log_clk) begin
             end
         end
         INTEG_DB_REQ_s: begin
-            if (ireq_tready_in == 1'b1) begin
+            if (ireq_condition_on) begin
                 state <= WAIT_TARGET_ACK_s;
             end
             else begin
@@ -273,7 +275,32 @@ always @(posedge log_clk) begin
     end
 end
 
-assign iresp_tready_o = 1'b1;
+assign ireq_condition_on = ireq_tready_in && ireq_tvalid_o;
+/*wire ireq_tvalid_next;
+always @(*) begin
+    ireq_tvalid_next = ireq_tvalid_o;
+    case(state)
+        DB_REQ_s: begin
+            if (ireq_tready_in | ~ireq_tvalid_o) begin
+                ireq_tvalid_next <= 1'b1;
+            end
+        end
+        IDLE_s, DB_RESP_s, BF_NWR_s, WAIT_TARGET_ACK_s: begin
+            ireq_tvalid_next <= 1'b0;
+        end
+        NWR_s: begin
+            if (ireq_tready_in | ~ireq_tvalid_o) begin
+                ireq_tvalid_next <= current_user_valid;
+            end
+        end
+        INTEG_DB_REQ_s: begin
+            if (ireq_tready_in | ~ireq_tvalid_o) begin
+                ireq_tvalid_next <= 1'b1;
+            end
+        end
+    endcase // state
+end
+*/
 
 always @(posedge log_clk) begin
     if (log_rst) begin
@@ -301,7 +328,14 @@ always @(posedge log_clk) begin
             DB_REQ_s: begin
                 rapidIO_ready_o <= 1'b0;
                 timer_ena <= 1'b0;
-                if (ireq_tready_in) begin
+                if (ireq_condition_on) begin
+                    ireq_tdata_o <= 'h0;
+                    ireq_tvalid_o <= 'h0;
+                    ireq_tkeep_o <= 'h0;
+                    ireq_tlast_o <= 'h0;
+                    ireq_tuser_o <= 'h0;
+                end
+                else if (ireq_tready_in) begin
                     // Send self-check
                     ireq_tdata_o <= db_instr[63:0];
                     ireq_tvalid_o <= 1'b1;
@@ -310,6 +344,14 @@ always @(posedge log_clk) begin
                     ireq_tuser_o <= {src_id, des_id};
                     $display($time, " Source->Target: Self doorbell check");
                 end
+                else begin
+                    ireq_tdata_o <= ireq_tdata_o;
+                    ireq_tvalid_o <= ireq_tvalid_o;
+                    ireq_tkeep_o <= ireq_tkeep_o;
+                    ireq_tlast_o <= ireq_tlast_o;
+                    ireq_tuser_o <= ireq_tuser_o;
+                end
+
             end
             DB_RESP_s: begin
                 timer_ena <= 1'b1;
@@ -340,44 +382,61 @@ always @(posedge log_clk) begin
                 else begin
                     ireq_tdata_o <= ireq_tdata_o;
                 end
-                /*
+                /*n
                 ireq_tdata_o = (current_user_valid && current_user_first && ireq_tready_in) ? {nwr_srcID, NWR, TNWR,
                             1'b0, 2'h1, 1'b0, current_user_data[7:0] , 2'h0, target_ed_addr}
                             : ((current_user_valid && ~current_user_first && ireq_tready_in) ? current_user_data
                             : ireq_tdata_o) ;
                 */
-                if (ireq_tready_in) begin
-                    ireq_tvalid_o <= current_user_valid;
-                    ireq_tkeep_o <= current_user_keep;
-                end
-                else begin
-                    ireq_tvalid_o <= ireq_tvalid_o;
-                    ireq_tkeep_o <= ireq_tkeep_o;
-                end
+
+                ireq_tkeep_o <= current_user_keep;
+                ireq_tvalid_o <= current_user_valid;
                 //ireq_tvalid_o = current_user_valid && ireq_tready_in;
                 //ireq_tkeep_o = current_user_keep ;
                 // In one transfer, called as packet here, the maximum length is 256 bytes.
 
+                if (nwr_packect_transfer_cnt == packect_transfer_times && nwr_8byte_cnt == current_user_size) begin
+                    ireq_tvalid_o <= 1'b0;
+                end
+                else if (nwr_8byte_cnt == 8'd31) begin
+                    ireq_tvalid_o <= 1'b0;
+                end
+                else begin
+                    ireq_tvalid_o <= current_user_valid;
+                end
+
                 if (nwr_packect_transfer_cnt == packect_transfer_times && !ireq_tlast_o) begin
                     ireq_tlast_o <= current_user_last;
-
                 end
-                else if (nwr_8byte_cnt == 8'd31) begin  // The end of a 64-Dword packect
+                else if (nwr_8byte_cnt == 8'd32) begin  // The end of a 64-Dword packect
                     ireq_tlast_o <= 1'b1;
-
                 end
                 else begin
                     ireq_tlast_o <= 1'b0;
                 end
             end // NWR_s:
             INTEG_DB_REQ_s: begin
-                if (ireq_tready_in) begin
+                if (ireq_condition_on) begin
+                    ireq_tdata_o <= 'h0;
+                    ireq_tvalid_o <= 'h0;
+                    ireq_tkeep_o <= 'h0;
+                    ireq_tlast_o <= 'h0;
+                    ireq_tuser_o <= 'h0;
+                end
+                else if (ireq_tready_in) begin
                     ireq_tdata_o <= {db_instr[63:32],db_req_inform,16'h0};
                     ireq_tvalid_o <= 1'b1;
                     ireq_tkeep_o <= 8'hff;
                     ireq_tlast_o <= 1'b1;
                     ireq_tuser_o <= {src_id, des_id};
                     $display($time, "Source->Target: Data integration doorbell reqest, and the address is %x", db_req_inform);
+                end
+                else begin
+                    ireq_tdata_o <= ireq_tdata_o;
+                    ireq_tvalid_o <= ireq_tvalid_o;
+                    ireq_tkeep_o <= ireq_tkeep_o;
+                    ireq_tlast_o <= ireq_tlast_o;
+                    ireq_tuser_o <= ireq_tuser_o;
                 end
                 //$display("Source->Target: Address is %x",db_req_inform);
             end
@@ -448,7 +507,7 @@ always @(posedge log_clk) begin : proc_nwr_write_cnt
             nwr_8byte_cnt <= 'h0;
             nwr_packect_transfer_cnt <= 'h0;
             end
-        else if (current_user_valid && ireq_tready_in) begin
+        else if (ireq_tvalid_o && ireq_tready_in) begin
             if (nwr_8byte_cnt == 8'd31) begin
                 nwr_packect_transfer_cnt <= nwr_packect_transfer_cnt + 4'h1;
                 nwr_8byte_cnt <= 'h0;
@@ -621,13 +680,28 @@ always @(posedge log_clk) begin
     end
 end
 
-assign current_user_valid = fifo_dout[74] ;
+assign current_user_valid = fifo_dout[74];
 assign current_user_first = fifo_dout[73];
 assign current_user_keep = fifo_dout[72:65];
 assign current_user_last  = fifo_dout[64];
 assign current_user_data = fifo_dout[63:0];
 //assign current_user_size = (user_data_first) ? user_tdata_r[7:0]  : current_user_size;
-assign current_user_size = (current_user_first) ? current_user_data[7:0]  : current_user_size;
+//assign current_user_size = (current_user_first) ? current_user_data[7:0]  : current_user_size;
+
+always @(posedge log_clk) begin
+    if (log_rst) begin
+        current_user_size <= 'hff;
+    end
+    else if (current_user_first) begin
+        current_user_size <= (current_user_data[7:0] + 1) >> 3;
+    end
+    else if (ireq_tlast_o) begin
+        current_user_size <= 'hff;
+    end
+    else begin
+        current_user_size <= current_user_size;
+    end
+end
 
 //assign packect_transfer_times = current_user_size[11:8];
 assign byte_left = current_user_size[7:0];
