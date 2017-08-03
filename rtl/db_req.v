@@ -371,6 +371,7 @@ always @(posedge log_clk) begin
                 if (ireq_tready_in) begin
                     if (current_user_valid && current_user_first) begin
                         ireq_tdata_o <= {nwr_srcID, NWR, TNWR,1'b0, 2'h1, 1'b0, current_user_data[7:0] , 2'h0, target_ed_addr};
+						 $display($time, " Source->Target: Now sending NWR packet with the length being %d and target ID being %x", current_user_size+1,target_ed_addr);
                     end
                     else if ((current_user_valid && ~current_user_first)) begin
                         ireq_tdata_o <= current_user_data;
@@ -398,22 +399,25 @@ always @(posedge log_clk) begin
                 if (nwr_packect_transfer_cnt == packect_transfer_times && nwr_8byte_cnt == current_user_size) begin
                     ireq_tvalid_o <= 1'b0;
                 end
-                else if (nwr_8byte_cnt == 8'd31) begin
+                else if (nwr_8byte_cnt == 8'd32) begin
                     ireq_tvalid_o <= 1'b0;
                 end
                 else begin
                     ireq_tvalid_o <= current_user_valid;
                 end
-
-                if (nwr_packect_transfer_cnt == packect_transfer_times && !ireq_tlast_o) begin
-                    ireq_tlast_o <= current_user_last;
-                end
-                else if (nwr_8byte_cnt == 8'd32) begin  // The end of a 64-Dword packect
-                    ireq_tlast_o <= 1'b1;
-                end
-                else begin
-                    ireq_tlast_o <= 1'b0;
-                end
+		
+				if (ireq_tready_in) begin
+					if (nwr_packect_transfer_cnt == packect_transfer_times && !ireq_tlast_o) begin
+						ireq_tlast_o <= current_user_last;
+					end
+					else if (nwr_8byte_cnt == 8'd32) begin  // The end of a 64-Dword packect
+						ireq_tlast_o <= 1'b1;
+					end
+					else begin
+						ireq_tlast_o <= 1'b0;
+					end
+				end
+					
             end // NWR_s:
             INTEG_DB_REQ_s: begin
                 if (ireq_condition_on) begin
@@ -508,7 +512,7 @@ always @(posedge log_clk) begin : proc_nwr_write_cnt
             nwr_packect_transfer_cnt <= 'h0;
             end
         else if (ireq_tvalid_o && ireq_tready_in) begin
-            if (nwr_8byte_cnt == 8'd31) begin
+            if (nwr_8byte_cnt == 8'd32) begin
                 nwr_packect_transfer_cnt <= nwr_packect_transfer_cnt + 4'h1;
                 nwr_8byte_cnt <= 'h0;
             end
@@ -555,7 +559,7 @@ end
 always @(negedge log_clk) begin
     if (state == NWR_s && current_user_first) begin
 
-        $display($time, " Source->Target: Now sending NWR packet with the length being %d and target ID being %x", current_user_size+1,target_ed_addr);
+       // $display($time, " Source->Target: Now sending NWR packet with the length being %d and target ID being %x", current_user_size+1,target_ed_addr);
         //$display("Source->Target: The target ID is %x", target_ed_addr);
     end
 
@@ -604,6 +608,7 @@ always @(posedge log_clk) begin
 end
 
 // Response signals
+assign iresp_tready_o = 1'b1;
 
 assign current_resp_tid   = iresp_tdata_in[63:56];
 assign current_resp_ftype = iresp_tdata_in[55:52];
