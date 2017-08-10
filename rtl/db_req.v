@@ -405,7 +405,7 @@ always @(posedge log_clk) begin
                 else begin
                     ireq_tvalid_o <= current_user_valid;
                 end
-		
+
 				if (ireq_tready_in) begin
 					if (nwr_packect_transfer_cnt == packect_transfer_times && !ireq_tlast_o) begin
 						ireq_tlast_o <= current_user_last;
@@ -417,7 +417,7 @@ always @(posedge log_clk) begin
 						ireq_tlast_o <= 1'b0;
 					end
 				end
-					
+
             end // NWR_s:
             INTEG_DB_REQ_s: begin
                 if (ireq_condition_on) begin
@@ -530,14 +530,6 @@ always @(posedge log_clk) begin : proc_nwr_write_cnt
         nwr_packect_transfer_cnt <= 'h0;
     end
 end
-
-// One NWR opearation is done
-// When the last dat in reg logic is it is nwr_done
-/*asreg nwr_done _packect_transfer_cnt == packect_transfer_times &&
-                    ((nwr_8byte_cnt[7:3] == current_user_size[7:3] - 1 && current_user_size[2:0] == 'h0)
-                    || (nwr_8byte_cnt[7:3] == current_user_size[7:3] && current_user_size[2:0] != 'h0)));reg
-                    */
-
 
 // Using ireq_last to indicate the packet boundary. When the number of transferred
 
@@ -663,7 +655,7 @@ always @(posedge log_clk) begin
         end
     end
 end
-
+//------------------------- FIFO --------------------------------------
 //Logic for user data
 assign fifo_rd_en = ((state == NWR_s || state == BF_NWR_s) && ~fifo_empty && ireq_tready_in) ? 1'b1 : 1'b0;
 assign fifo_dout_valid = fifo_rd_en;
@@ -741,6 +733,8 @@ fifo_75x512 user_data_fifo (
   .empty(fifo_empty),            // output wire empty
   .data_count(fifo_data_cnt)  // output wire [8 : 0] data_count
 );
+
+//----------------------- Debug ----------------------------------------
 generate if (!SIM) begin: ila_req_gen
 
     assign ireq_tlast_ila[0] = ireq_tlast_o;
