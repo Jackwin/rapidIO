@@ -28,8 +28,9 @@ module input_reader # (
     output [DATA_WIDTH/8-1:0] output_tkeep,
     output [7:0] output_data_len,
     output output_tlast,
-    output output_pack_tfisrt,
-    output output_pack_tlast
+    output output_tfirst,
+    // The last 8-byte of user logic data
+    output output_done
 );
 
 reg [DATA_LENGTH_WIDTH-1:0] data_len_r1, data_len_r2, data_len_reg;
@@ -83,6 +84,8 @@ wire pack_reset;
 //Output
 reg output_strobe;
 
+assign data_ready_out = ~full;
+
 always @(posedge clk or posedge reset) begin
     if (reset) begin
         {data_valid_r1, data_valid_r1} <= 2'h0;
@@ -118,7 +121,7 @@ assign wr_tail = (counter[DATA_LENGTH_WIDTH-3-1:5] == trans_256B_times_reg
                 && (counter[4:0] > tail_length_reg[7:3])) ? 1'b1 : 1'b0;
 
 assign wr_tail_tlast = (counter[DATA_LENGTH_WIDTH-3-1:5] == trans_256B_times_reg)
-                        && (counter[4:0] == rounded_length_reg[7:3] - 'h1);
+                        && wr_pack_tlast;
 
 assign wr_data = !wr_tail ? {data_in_r1, data_keep_r1, data_first_r1, data_tlast,
                 wr_pack_tfirst, wr_pack_tlast}
@@ -154,10 +157,10 @@ always @(posedge clk) begin
         if (data_first_in) begin
             pack_trans_count <= trans_256B_times;
         end
-        else if (output_pack_tlast) begin
+        else if (output_tlast) begin
             pack_trans_count <= pack_trans_count - 'h1;
         end
-        else if (output_tlast) begin
+        else if (output_done) begin
             pack_trans_count <= 'h0;
         end
         else begin
@@ -219,12 +222,13 @@ end
 assign wr_pack_tfirst = (counter_ena == 1'b1 && counter[4:0] == 'h0) ? 1'b1 : 1'b0;
 //assign wr_pack_tlast = (counter_ena == 1'b1 && counter[4:0] == 'h1f || wr_tail_tlast)
 //                        ? 1'b1 : 1'b0;
-
+reg [4:0] tmp;
 always @* begin
     wr_pack_tlast = 1'b0;
     if (counter_ena) begin
         if (counter[DATA_LENGTH_WIDTH-3-1:5] == trans_256B_times_reg) begin
-            wr_pack_tlast = (counter[4:0] == rounded_length_reg[7:3] - 'h1);
+            tmp = rounded_length_reg[7:3] - 'h1;
+            wr_pack_tlast = (counter[4:0] == tmp);
         end
         else begin
             wr_pack_tlast = (counter[4:0] == 'h1f); // 256-byte
@@ -322,7 +326,8 @@ always @* begin
     read = 1'b0;
     rd_data_valid_next = rd_data_valid_reg;
 
-    if (fetch_data_in && (output_tready | ~rd_data_valid_reg)) begin
+    //if (fetch_data_in && (output_tready | ~rd_data_valid_reg)) begin
+    if (output_tready | ~rd_data_valid_reg) begin
         if (~empty) begin
             read = 1'b1;
             rd_ptr_next = rd_ptr_reg + 'h1;
@@ -374,10 +379,15 @@ assign rd_pack_tkeep = rd_data[11:4];
 //output
 assign output_tdata = rd_data[DATA_WIDTH+4+8-1:4+8];
 assign output_tkeep = rd_pack_tkeep;
-assign output_tlast = rd_pack_tlast && rd_data_tlast && rd_data_valid_reg;
+//assign output_tlast = rd_pack_tlast && rd_data_tlast && rd_data_valid_reg;
+assign output_tlast = rd_pack_tlast && rd_data_valid_reg;
 assign output_tvalid = rd_data_valid_reg;
-assign output_pack_tfisrt = rd_pack_tfirst;
-assign output_pack_tlast = rd_pack_tlast && rd_data_valid_reg;
+assign output_tfirst = rd_pack_tfirst;
+
+// Acknowledge to the use_logic master
+assign ack_o = rd_pack_tlast && rd_data_tlast && rd_data_valid_reg;
+// Tell db_req the current transmission is done
+assign output_done = rd_pack_tlast && rd_data_tlast && rd_data_valid_reg;
 
 
 task transLengthComp;

@@ -6,7 +6,7 @@
 
 `timescale 1ns/1ns
 module db_req
-    #(parameter SIM = 0)
+    #(parameter SIM = 1)
     (
     input log_clk,
     input log_rst,
@@ -20,19 +20,19 @@ module db_req
     output reg rapidIO_ready_o,
     input wire link_initialized,
 
+    // Interface with user logic
     // Indicate NWR is ready to receive data from user logic
     output reg nwr_ready_o,
     output reg nwr_busy_o,
-    output wire nwr_ack_done_o,
-
+    output wire nwr_done_ack_o,
 
     output wire user_tready_o,
     input wire [33:0] user_addr,
     input wire [3:0] user_ftype,
     input wire [3:0] user_ttype,
-    input wire [11:0] user_tsize_in,
-
+    input wire [7:0] user_tsize_in,
     input wire [63:0] user_tdata_in,
+    input wire user_tfirst_in,
     input wire user_tvalid_in,
     input wire [7:0] user_tkeep_in,
     input wire user_tlast_in,
@@ -45,12 +45,12 @@ module db_req
     output wire [1:0] error_type_o,
     output wire [7:0] error_target_id,
 
-    output reg             ireq_tvalid_o,
-    input wire             ireq_tready_in,
-    output reg             ireq_tlast_o,
-    output reg [63:0]    ireq_tdata_o,
-    output reg [7:0]     ireq_tkeep_o,
-    output reg [31:0]     ireq_tuser_o,
+    output reg ireq_tvalid_o,
+    input wire ireq_tready_in,
+    output reg ireq_tlast_o,
+    output reg [63:0] ireq_tdata_o,
+    output reg [7:0] ireq_tkeep_o,
+    output reg [31:0] ireq_tuser_o,
 
     input             iresp_tvalid_in,
     output wire        iresp_tready_o,
@@ -138,7 +138,7 @@ wire fifo_wr_en;
 wire fifo_rd_en;
 reg[2:0] fifo_rd_en_r;
 wire [74:0] fifo_dout;
-wire fifo_dout_valid;
+reg fifo_dout_valid;
 wire fifo_full;
 wire fifo_empty;
 wire [8:0] fifo_data_cnt;
@@ -149,6 +149,7 @@ reg fifo_data_first;
 reg user_tvalid_r;
 reg [63:0]     user_tdata_r;
 reg user_tlast_r;
+reg [7:0] user_tsize_r;
 reg [7:0] user_tkeep_r;
 wire [63:0] current_user_data;
 wire current_user_valid;
@@ -160,7 +161,6 @@ reg [7:0] current_user_size = 8'h0;
 reg [8:0] nwr_byte_cnt;
 reg [8:0] nwr_8byte_cnt;
 reg [4:0] nwr_packect_transfer_cnt; // A whole packect contains 256 bytes
-reg user_data_first;
 reg [4:0] packect_transfer_times;
 wire [7:0] byte_left;
 
@@ -383,19 +383,13 @@ always @(posedge log_clk) begin
                 else begin
                     ireq_tdata_o <= ireq_tdata_o;
                 end
-                /*n
-                ireq_tdata_o = (current_user_valid && current_user_first && ireq_tready_in) ? {nwr_srcID, NWR, TNWR,
-                            1'b0, 2'h1, 1'b0, current_user_data[7:0] , 2'h0, target_ed_addr}
-                            : ((current_user_valid && ~current_user_first && ireq_tready_in) ? current_user_data
-                            : ireq_tdata_o) ;
-                */
-
                 ireq_tkeep_o <= current_user_keep;
-                ireq_tvalid_o <= current_user_valid;
+                ireq_tvalid_o <= current_user_valid && fifo_dout_valid;
+                ireq_tlast_o <= current_user_last && fifo_dout_valid;
                 //ireq_tvalid_o = current_user_valid && ireq_tready_in;
                 //ireq_tkeep_o = current_user_keep ;
                 // In one transfer, called as packet here, the maximum length is 256 bytes.
-
+/*
                 if (nwr_packect_transfer_cnt == packect_transfer_times && nwr_8byte_cnt == current_user_size) begin
                     ireq_tvalid_o <= 1'b0;
                 end
@@ -417,7 +411,7 @@ always @(posedge log_clk) begin
 						ireq_tlast_o <= 1'b0;
 					end
 				end
-
+*/
             end // NWR_s:
             INTEG_DB_REQ_s: begin
                 if (ireq_condition_on) begin
@@ -618,7 +612,7 @@ assign target_busy =  (get_a_response && current_resp_db_info == 16'h01ff) ? 1'b
 assign target_confirm = (get_a_response && current_resp_db_info == db_req_inform) ? 1'b1 : 1'b0;
 assign target_ack = target_confirm;
 // Indicate a NWRITE and data integration is done successfully
-assign nwr_ack_done_o = target_confirm;
+assign nwr_done_ack_o = target_confirm;
 
 always @(posedge get_a_response) begin
     //if (get_a_response) begin
@@ -658,12 +652,14 @@ end
 //------------------------- FIFO --------------------------------------
 //Logic for user data
 assign fifo_rd_en = ((state == NWR_s || state == BF_NWR_s) && ~fifo_empty && ireq_tready_in) ? 1'b1 : 1'b0;
-assign fifo_dout_valid = fifo_rd_en;
+//assign fifo_dout_valid = fifo_rd_en;
 assign user_tready_o = ~fifo_full;
 assign fifo_clk = log_clk;
 assign fifo_rst = log_rst_q;
-assign fifo_din = {user_tvalid_r, fifo_data_first, user_tkeep_r, user_tlast_r, user_tdata_r};
-assign fifo_wr_en = user_tvalid_r;
+//assign fifo_din = {user_tvalid_r, fifo_data_first, user_tkeep_r, user_tlast_r, user_tdata_r};
+assign fifo_din = user_tfirst_in ? {1'b1, user_tfirst_in, user_tkeep_r, user_tlast_r, {56'h0, {user_tsize_in}}}
+                                 : {user_tvalid_r, 1'b0, user_tkeep_r, user_tlast_r, user_tdata_r};
+assign fifo_wr_en = user_tvalid_in || user_tvalid_r;
 
 // When in simulation, FIFO output is delayed by about 100 ps, which will affect the combined logics
 // Make the fifo_dout aligned with the posedge of log_clk in simulation
@@ -671,9 +667,11 @@ assign fifo_wr_en = user_tvalid_r;
 always @(posedge log_clk) begin
     if (log_rst) begin
         fifo_rd_en_r <= 3'b000;
+        fifo_dout_valid <= 1'b0;
     end
     else begin
         fifo_rd_en_r[2:0] <= {fifo_rd_en_r[1:0], fifo_rd_en};
+        fifo_dout_valid <= fifo_rd_en;
     end
 end
 
@@ -709,16 +707,15 @@ always @(posedge fifo_clk) begin
         user_tdata_r <= 1'b0;
         user_tlast_r <= 1'b0;
         user_tkeep_r <= 'h0;
+        user_tsize_r <= 'h0;
     end
     else begin
         user_tvalid_r <= user_tvalid_in;
-        user_data_first <= ~user_tvalid_r & user_tvalid_in;
-
-        fifo_data_first    <= ~user_tvalid_r & user_tvalid_in;
-
+        //fifo_data_first    <= ~user_tvalid_r & user_tvalid_in;
         user_tdata_r <= user_tdata_in;
         user_tkeep_r <= user_tkeep_in;
         user_tlast_r <= user_tlast_in;
+        user_tsize_r <= user_tsize_in;
     end
 end
 

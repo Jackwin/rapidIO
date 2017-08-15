@@ -19,9 +19,9 @@ logic [DATA_WIDTH-1:0] output_tdata;
 logic output_tvalid;
 logic [DATA_WIDTH/8-1:0] output_tkeep;
 logic output_tlast;
-logic output_pack_tfisrt;
-logic output_pack_tlast;
-
+logic output_tfisrt;
+logic output_done;
+logic ack;
 localparam DATA_NUM = 32;
 initial begin
     log_clk = 0;
@@ -121,7 +121,7 @@ input_reader_i (
     .data_len_in(data_gen_len),
     .data_last_in(data_gen_tlast),
     .data_ready_out(),
-    .ack_o(),
+    .ack_o(ack),
 
     .fetch_data_in(fetch_data_in),
     .output_tready(output_tready),
@@ -129,8 +129,8 @@ input_reader_i (
     .output_tvalid(output_tvalid),
     .output_tkeep(output_tkeep),
     .output_tlast(output_tlast),
-    .output_pack_tfisrt(output_pack_tfisrt),
-    .output_pack_tlast (output_pack_tlast)
+    .output_tfisrt(output_tfisrt),
+    .output_done (output_pack_tlast)
 );
 
 endmodule // input_reader

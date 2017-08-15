@@ -13,9 +13,10 @@ module user_logic (
 	output wire [33:0] user_addr_o,
 
 
-    output wire [11:0] user_tsize_o,
+    output wire [19:0] user_tsize_o,
 
     output wire [63:0] user_tdata_o,
+    output wire user_tfirst_o,
     output reg user_tvalid_o,
     output reg [7:0] user_tkeep_o,
     output wire user_tlast_o
@@ -39,23 +40,23 @@ reg [2:0] data_sel;
 
 reg [1:0] state;
 reg [63:0] gen_data;
-reg [11:0] user_tsize;
+reg [19:0] user_tsize;
 
 reg [11:0] byte_cnt;
 
 // Count the sent data in the unit of qword
-reg [9:0] qword_cnt;
+reg [16:0] qword_cnt;
 reg data_first;
 
 
 assign user_tsize_o = user_tsize-1;
-assign user_tlast_o = ((qword_cnt == (user_tsize[11:3] ) && user_tsize[2:0] == 2'd0) ||
-						(qword_cnt == (user_tsize[11:3] +1 ) && user_tsize[2:0] != 2'd0));
+assign user_tlast_o = ((qword_cnt == (user_tsize[19:3] ) && user_tsize[2:0] == 2'd0) ||
+						(qword_cnt == (user_tsize[19:3] +1 ) && user_tsize[2:0] != 2'd0));
 assign user_tdata_o = gen_data;
 
 always @(*) begin
 	if (user_tlast_o) begin
-		case(user_tsize[2:0]) 
+		case(user_tsize[2:0])
 			// Data placement is from left to high, like little-endian.
 			3'd0: user_tkeep_o = 8'hff;
 			3'h1: user_tkeep_o = 8'h80;
@@ -103,13 +104,10 @@ always @(posedge log_clk or posedge	log_rst) begin
 				byte_cnt <= 'h0;
 				if (nwr_ready_in && user_tready_in) begin
 					state <= GEN_DATA_s;
-					
-					user_tvalid_o <= 1'b1;
 				end
 				else begin
 					state <= IDLE_s;
 				end
-				gen_data <= {52'h0, user_tsize-1};
 
 			end
 			GEN_DATA_s: begin
@@ -118,7 +116,7 @@ always @(posedge log_clk or posedge	log_rst) begin
 					gen_data <= gen_data + 64'h1;
 					user_tvalid_o <= 1'b1;
 					qword_cnt <= qword_cnt + 1;
-		
+
 				end
 				else begin
 					gen_data <= gen_data;
@@ -161,5 +159,7 @@ always @(posedge log_clk or posedge log_rst) begin
 		end
 	end
 end
-				
-endmodule // user_logic	
+
+assign user_tfirst_o = data_first;
+
+endmodule // user_logic
