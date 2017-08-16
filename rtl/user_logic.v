@@ -11,25 +11,26 @@ module user_logic (
 
 	input wire user_tready_in,
 	output wire [33:0] user_addr_o,
-    output wire [3:0] user_ftype_o,
-    output wire [3:0] user_ttype_o,
-    output wire [11:0] user_tsize_o,
+
+
+    output wire [19:0] user_tsize_o,
 
     output wire [63:0] user_tdata_o,
+    output wire user_tfirst_o,
     output reg user_tvalid_o,
     output reg [7:0] user_tkeep_o,
     output wire user_tlast_o
 
 	);
 
-localparam DATA_SIZE0 = 255;
-localparam DATA_SIZE1 = 256;
-localparam DATA_SIZE2 = 257;
-localparam DATA_SIZE3 = 258;
-localparam DATA_SIZE4 = 259;
-localparam DATA_SIZE5 = 260;
-localparam DATA_SIZE6 = 512;
-localparam DATA_SIZE7 = 513;
+localparam DATA_SIZE0 = 7;
+localparam DATA_SIZE1 = 37;
+localparam DATA_SIZE2 = 80;
+localparam DATA_SIZE3 = 255;
+localparam DATA_SIZE4 = 41;
+localparam DATA_SIZE5 = 8;
+localparam DATA_SIZE6 = 263;
+localparam DATA_SIZE7 = 1034;
 
 localparam IDLE_s = 2'd0;
 localparam GEN_DATA_s = 2'd1;
@@ -39,23 +40,23 @@ reg [2:0] data_sel;
 
 reg [1:0] state;
 reg [63:0] gen_data;
-reg [11:0] user_tsize;
+reg [19:0] user_tsize;
 
 reg [11:0] byte_cnt;
 
 // Count the sent data in the unit of qword
-reg [9:0] qword_cnt;
+reg [16:0] qword_cnt;
 reg data_first;
 
 
 assign user_tsize_o = user_tsize-1;
-assign user_tlast_o = ((qword_cnt == (user_tsize[11:3] ) && user_tsize[2:0] == 2'd0) ||
-						(qword_cnt == (user_tsize[11:3] + 1) && user_tsize[2:0] != 2'd0));
+assign user_tlast_o = ((qword_cnt == (user_tsize[19:3] ) && user_tsize[2:0] == 2'd0) ||
+						(qword_cnt == (user_tsize[19:3] +1 ) && user_tsize[2:0] != 2'd0));
 assign user_tdata_o = gen_data;
 
-always @(user_tlast_o) begin
+always @(*) begin
 	if (user_tlast_o) begin
-		case(user_tsize[2:0]) 
+		case(user_tsize[2:0])
 			// Data placement is from left to high, like little-endian.
 			3'd0: user_tkeep_o = 8'hff;
 			3'h1: user_tkeep_o = 8'h80;
@@ -73,6 +74,19 @@ always @(user_tlast_o) begin
 	end
 end
 
+always @(*) begin
+	case(data_sel)
+		3'd0: user_tsize <= DATA_SIZE0;
+		3'd1: user_tsize <= DATA_SIZE1;
+		3'd2: user_tsize <= DATA_SIZE2;
+		3'd3: user_tsize <= DATA_SIZE3;
+		3'd4: user_tsize <= DATA_SIZE4;
+		3'd5: user_tsize <= DATA_SIZE5;
+		3'd6: user_tsize <= DATA_SIZE6;
+		3'd7: user_tsize <= DATA_SIZE7;
+	endcase // data_sel
+end
+
 always @(posedge log_clk or posedge	log_rst) begin
 	if (log_rst) begin
 		state <= IDLE_s;
@@ -80,36 +94,21 @@ always @(posedge log_clk or posedge	log_rst) begin
 		gen_data <= 'h0;
 		qword_cnt <= 'h0;
 		byte_cnt <= 'h0;
-		user_tsize <= 12'hfff;
 	end
 	else begin
 		user_tvalid_o <= 1'b0;
 		case(state)
 			IDLE_s: begin
-				data_sel <= 2'h0;
 				gen_data <= 'h0;
 				qword_cnt <= 'h0;
 				byte_cnt <= 'h0;
 				if (nwr_ready_in && user_tready_in) begin
 					state <= GEN_DATA_s;
-					data_sel <= data_sel + 4'h1;
-					gen_data <= {52'h0, user_tsize-1};
-					user_tvalid_o <= 1'b1;
 				end
 				else begin
 					state <= IDLE_s;
 				end
 
-				case(data_sel)
-					3'd0: user_tsize <= DATA_SIZE0;
-					3'd1: user_tsize <= DATA_SIZE1;
-					3'd2: user_tsize <= DATA_SIZE2;
-					3'd3: user_tsize <= DATA_SIZE3;
-					3'd4: user_tsize <= DATA_SIZE4;
-					3'd5: user_tsize <= DATA_SIZE5;
-					3'd6: user_tsize <= DATA_SIZE6;
-					3'd7: user_tsize <= DATA_SIZE7;
-				endcase // data_sel
 			end
 			GEN_DATA_s: begin
 
@@ -117,7 +116,7 @@ always @(posedge log_clk or posedge	log_rst) begin
 					gen_data <= gen_data + 64'h1;
 					user_tvalid_o <= 1'b1;
 					qword_cnt <= qword_cnt + 1;
-		
+
 				end
 				else begin
 					gen_data <= gen_data;
@@ -134,10 +133,11 @@ always @(posedge log_clk or posedge	log_rst) begin
 				end // else
 			end
 			END_s: begin
-				data_sel <= 2'h0;
 				gen_data <= 'h0;
 				qword_cnt <= 'h0;
 				byte_cnt <= 'h0;
+				state <= IDLE_s;
+				data_sel <= data_sel + 4'h1;
 			end
 			default: begin
 				state <= IDLE_s;
@@ -159,5 +159,7 @@ always @(posedge log_clk or posedge log_rst) begin
 		end
 	end
 end
-				
-endmodule // user_logic	
+
+assign user_tfirst_o = data_first && user_tvalid_o;
+
+endmodule // user_logic

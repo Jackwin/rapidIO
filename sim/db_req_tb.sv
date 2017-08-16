@@ -10,7 +10,7 @@ module db_req_tb();
 	logic dr_req_in;
 	logic nwr_req_in;
 	logic rapidIO_ready;
-	logic link_initialized;
+	logic link_initialized = 1;
 
 	logic nwr_ready_o;
 	logic nwr_busy_o;
@@ -25,27 +25,40 @@ module db_req_tb();
     logic user_tvalid_in;
     logic [7:0] user_tkeep_in;
     logic user_tlast_in;
+    logic user_tfirst_in;
 
-    logic [11:0] user_tsize_in;
+    logic [19:0] user_tsize_in;
     logic user_tready_o;
 
+    //NWR signals
+    logic [63:0] nwr_tdata;
+    logic nwr_tvalid;
+    logic [7:0] nwr_tkeep;
+    logic nwr_tlast;
+    logic nwr_tready;
+    logic nwr_tfirst;
+    logic nwr_pack_tlast;
+    logic [7:0] nwr_tsize;
+    logic nwr_ack_done;
+
+    // Ireq signals
 	logic ireq_tvalid_o;
 	logic ireq_tready_in;
 	logic ireq_tlast_o;
 	logic [63:0]	ireq_tdata_o;
-	logic [7:0] 	ireq_tkeep_o;	
+	logic [7:0] 	ireq_tkeep_o;
 	logic [31:0] 	ireq_tuser_o;
 
-    logic         iresp_tvalid;
-    logic       iresp_tready;
-    logic             iresp_tlast;
-    logic      [63:0] iresp_tdata;
-    logic       [7:0] iresp_tkeep;
-    logic      [31:0] iresp_tuser;	
+    logic iresp_tvalid;
+    logic iresp_tready;
+    logic iresp_tlast;
+    logic [63:0] iresp_tdata;
+    logic [7:0] iresp_tkeep;
+    logic [31:0] iresp_tuser;
 
     // Response endpoint signals
 	logic [15:0] resp_src_id = 16'hf0;
-	logic [15:0] resp_des_id = 16'h01;    
+	logic [15:0] resp_des_id = 16'h01;
 
     logic resp_ed_ready;
     logic treq_tvalid_in;
@@ -55,12 +68,12 @@ module db_req_tb();
     logic [7:0] treq_tkeep_in;
     logic [31:0] treq_tuser_in;
 
-    logic          tresp_tready_in;
-    logic          tresp_tvalid_o;
-    logic          tresp_tlast_o;
-    logic [63:0]   tresp_tdata_o;
-    logic [7:0]    tresp_tkeep_o;
-    logic [31:0]   tresp_tuser_o;
+    logic tresp_tready_in;
+    logic tresp_tvalid_o;
+    logic tresp_tlast_o;
+    logic [63:0] tresp_tdata_o;
+    logic [7:0] tresp_tkeep_o;
+    logic [31:0] tresp_tuser_o;
 
 
     initial begin
@@ -79,7 +92,7 @@ module db_req_tb();
     	dr_req_in <= 0;
     	nwr_req_in <= 0;
 
-    	#200;
+    	#2000;
     	@(posedge log_clk) begin
     		if (rapidIO_ready) begin
     			dr_req_in <= 1;
@@ -93,10 +106,28 @@ module db_req_tb();
     	@(posedge log_clk);
     	nwr_req_in <= 1;
     	@(posedge log_clk);
-    	nwr_req_in <= 0;	
+    	nwr_req_in <= 0;
+
+        for (int k = 0; k < 7; k++) begin
+
+            wait (nwr_ack_done && rapidIO_ready);
+            #30;
+             @(posedge log_clk);
+            dr_req_in <= 1;
+            @(posedge log_clk);
+            dr_req_in <= 0;
+
+            wait (nwr_ready_o);
+            #30;
+            @(posedge log_clk);
+            nwr_req_in <= 1;
+            @(posedge log_clk);
+            nwr_req_in <= 0;
+        end
+
+        #3000;
+        $stop;
     end // initial
-
-
 
 	 db_req db_req_i(
 	 .log_clk(log_clk),
@@ -112,26 +143,22 @@ module db_req_tb();
 
 	.nwr_ready_o(nwr_ready_o),
 	.nwr_busy_o(nwr_busy_o),
+    .nwr_done_ack_o (nwr_ack_done),
 
-	.go(go),
 	.user_addr(user_addr),
-    .user_ftype(user_ftype),
-    .user_ttype(user_ttype),
-
-
-    .user_tdata_in(user_tdata_in),
-    .user_tvalid_in(user_tvalid_in),
-    .user_tkeep_in(user_tkeep_in),
-    .user_tlast_in(user_tlast_in),
-    //Byte length
-    .user_tsize_in(user_tsize_in), 
-    .user_tready_o(user_tready_o),
+    .user_tdata_in(nwr_tdata),
+    .user_tvalid_in(nwr_tvalid),
+    .user_tfirst_in(nwr_tfirst),
+    .user_tkeep_in(nwr_tkeep),
+    .user_tlast_in(nwr_tlast),
+    .user_tsize_in(nwr_tsize),
+    .user_tready_o(nwr_tready),
 
 	.ireq_tvalid_o(ireq_tvalid_o),
 	.ireq_tready_in(ireq_tready_in),
 	.ireq_tlast_o(ireq_tlast_o),
 	.ireq_tdata_o(ireq_tdata_o),
-	.ireq_tkeep_o(ireq_tkeep_o),	
+	.ireq_tkeep_o(ireq_tkeep_o),
 	.ireq_tuser_o(ireq_tuser_o),
 
     .iresp_tvalid_in(iresp_tvalid),
@@ -139,7 +166,7 @@ module db_req_tb();
     .iresp_tlast_in(iresp_tlast),
     .iresp_tdata_in(iresp_tdata),
     .iresp_tkeep_in(iresp_tkeep),
-    .iresp_tuser_in(iresp_tuser)	
+    .iresp_tuser_in(iresp_tuser)
 	);
 
 always_comb begin
@@ -150,7 +177,7 @@ always_comb begin
     treq_tuser_in = ireq_tuser_o;
     ireq_tready_in = treq_tready_o;
 
-    tresp_tready_in = 1;    
+    tresp_tready_in = 1;
 
     iresp_tvalid = tresp_tvalid_o;
     tresp_tready_in = iresp_tready;
@@ -182,7 +209,7 @@ end
 	.tresp_tvalid_o(tresp_tvalid_o),
 	.tresp_tlast_o(tresp_tlast_o),
 	.tresp_tdata_o(tresp_tdata_o),
-	.tresp_tkeep_o(tresp_tkeep_o),	
+	.tresp_tkeep_o(tresp_tkeep_o),
 	.tresp_tuser_o(tresp_tuser_o)
 	);
 
@@ -196,15 +223,46 @@ user_logic user_logic_i (
 
     .user_tready_in(user_tready_o),
     .user_addr_o(user_addr),
-    .user_ftype_o(),
-    .user_ttype_o(),
     .user_tsize_o(user_tsize_in),
 
     .user_tdata_o(user_tdata_in),
     .user_tvalid_o(user_tvalid_in),
+    .user_tfirst_o(user_tfirst_in),
     .user_tkeep_o(user_tkeep_in),
     .user_tlast_o(user_tlast_in)
 
     );
+
+
+ input_reader # (
+    .DATA_WIDTH(64),
+    .DATA_LENGTH_WIDTH(20),
+    .RAM_ADDR_WIDTH(10)
+    )
+input_reader_i (
+    .clk(log_clk),    // Clock
+    .reset(log_rst),
+
+    .data_in(user_tdata_in),
+    .data_valid_in(user_tvalid_in),
+    .data_first_in(user_tfirst_in),
+    .data_keep_in(user_tkeep_in),
+    .data_len_in(user_tsize_in),
+    .data_last_in(user_tlast_in),
+    .data_ready_out(user_tready_o),
+    .ack_o(ack),
+
+    .fetch_data_in(),
+    .output_tready(nwr_tready),
+    .output_tdata(nwr_tdata),
+    .output_tvalid(nwr_tvalid),
+    .output_tkeep(nwr_tkeep),
+    .output_tlast(nwr_tlast),
+    .output_tfirst(nwr_tfirst),
+    .output_data_len(nwr_tsize),
+    .output_done (nwr_pack_tlast)
+);
+
+
 
 endmodule // db_req_tb
