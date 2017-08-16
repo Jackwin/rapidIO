@@ -108,7 +108,7 @@ module db_req_tb();
     	@(posedge log_clk);
     	nwr_req_in <= 0;
 
-        for (int k = 0; k < 5; k++) begin
+        for (int k = 0; k < 7; k++) begin
 
             wait (nwr_ack_done && rapidIO_ready);
             #30;

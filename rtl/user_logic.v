@@ -23,14 +23,14 @@ module user_logic (
 
 	);
 
-localparam DATA_SIZE0 = 128;
-localparam DATA_SIZE1 = 256;
-localparam DATA_SIZE2 = 64;
-localparam DATA_SIZE3 = 32;
-localparam DATA_SIZE4 = 16;
-localparam DATA_SIZE5 = 16;
-localparam DATA_SIZE6 = 512;
-localparam DATA_SIZE7 = 264;
+localparam DATA_SIZE0 = 7;
+localparam DATA_SIZE1 = 37;
+localparam DATA_SIZE2 = 80;
+localparam DATA_SIZE3 = 255;
+localparam DATA_SIZE4 = 41;
+localparam DATA_SIZE5 = 8;
+localparam DATA_SIZE6 = 263;
+localparam DATA_SIZE7 = 1034;
 
 localparam IDLE_s = 2'd0;
 localparam GEN_DATA_s = 2'd1;
@@ -160,6 +160,6 @@ always @(posedge log_clk or posedge log_rst) begin
 	end
 end
 
-assign user_tfirst_o = data_first;
+assign user_tfirst_o = data_first && user_tvalid_o;
 
 endmodule // user_logic

@@ -26,7 +26,7 @@ module input_reader # (
     output [DATA_WIDTH-1:0] output_tdata,
     output output_tvalid,
     output [DATA_WIDTH/8-1:0] output_tkeep,
-    output [7:0] output_data_len,
+    output reg [7:0] output_data_len,
     output output_tlast,
     output output_tfirst,
     // The last 8-byte of user logic data
@@ -182,7 +182,16 @@ always @* begin
     end
 end
 
-assign output_data_len = current_pack_length;
+always @ (posedge clk) begin
+    if (reset) begin
+        output_data_len <= 'h0;
+    end
+    else if (data_first_in) begin
+        output_data_len <= current_pack_length;
+    end
+end
+
+//assign output_data_len = current_pack_length;
 //--------------------------------------------------------------------------------
 
 always @(posedge clk) begin
@@ -430,7 +439,7 @@ task transLengthComp;
             8'b1xxxxxxx: begin
                 //pad_length = 255 - data_length_in[7:0];
                 pad_length = 4'b1111 - data_length_in[6:3];
-                rounded_length = 8'd256;
+                rounded_length = 8'd0; //256
             end
             default: begin
                 pad_length = 'h0;
